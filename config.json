@@ -1,0 +1,15 @@
+{
+    "server": "imap.example.com",
+    "port": 993,
+    "username": "example@example.com",
+    "password": "secure_password",
+    "use_ssl": true,
+    "mailbox": "INBOX",
+    "search_criteria": "ALL",
+    "organize_by_sender": true,
+    "organize_by_date": true,
+    "save_path": "/Path/To/Dir",
+    "limit_per_folder": 100,
+    "total_limit": 1000,
+    "save_metadata": true
+}
