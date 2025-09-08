@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 
 """
-E-Mail Anhänge Extraktor für macOS
-Extrahiert alle Anhänge aus einer IMAP-Mailbox und speichert sie auf einer externen Festplatte
+Cross-Platform Email Attachment Extractor
+Extracts all attachments from IMAP mailboxes and saves them to a specified location
+Compatible with Windows, Linux, and macOS
 """
 
 import imaplib
-# imaplib.Debug = 4
 import email
 from email import policy
 from email.header import decode_header
@@ -19,11 +19,55 @@ from datetime import datetime
 from pathlib import Path
 import argparse
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import ssl
+import platform
+
+# Cross-platform colored output
+class Colors:
+    """Cross-platform color codes for terminal output"""
+    
+    # Check if we're on Windows
+    if platform.system() == 'Windows':
+        # Enable ANSI escape sequences on Windows 10+
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+        except:
+            pass
+    
+    # ANSI color codes
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    CYAN = '\033[96m'
+    YELLOW = '\033[93m'
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    
+    @staticmethod
+    def error(text):
+        """Red text for errors"""
+        return f"{Colors.RED}{text}{Colors.RESET}"
+    
+    @staticmethod
+    def success(text):
+        """Green text for success messages"""
+        return f"{Colors.GREEN}{text}{Colors.RESET}"
+    
+    @staticmethod
+    def info(text):
+        """Cyan text for information"""
+        return f"{Colors.CYAN}{text}{Colors.RESET}"
+    
+    @staticmethod
+    def warning(text):
+        """Yellow text for warnings"""
+        return f"{Colors.YELLOW}{text}{Colors.RESET}"
+
 
 class EmailAttachmentExtractor:
-    """Klasse zum Extrahieren von E-Mail-Anhängen über IMAP"""
+    """Class for extracting email attachments via IMAP"""
 
     KNOWN_PROVIDERS = {
         'gmail':   {'server': 'imap.gmail.com',         'port': 993, 'ssl': True},
@@ -56,13 +100,13 @@ class EmailAttachmentExtractor:
             else:
                 self.imap = imaplib.IMAP4(self.server, self.port)
             self.imap.login(self.username, self.password)
-            print(f"✅ Erfolgreich mit {self.server} verbunden")
+            print(Colors.success(f"Successfully connected to {self.server}"))
             return True
         except imaplib.IMAP4.error as e:
-            print(f"❌ IMAP-Fehler: {e}")
+            print(Colors.error(f"IMAP error: {e}"))
             return False
         except Exception as e:
-            print(f"❌ Verbindungsfehler: {e}")
+            print(Colors.error(f"Connection error: {e}"))
             return False
 
     def get_mailboxes(self) -> List[str]:
@@ -70,36 +114,36 @@ class EmailAttachmentExtractor:
             status, mailboxes = self.imap.list()
             if status != 'OK' or not mailboxes:
                 return []
-        
+            
             folders: List[str] = []
             for raw in mailboxes:
                 if raw is None:
                     continue
-                
+                    
                 line = raw.decode(errors='replace')
-            
-              # Teile die Zeile in drei Teile: (flags) "delimiter" name
-                # Verwende Regex um das zu extrahieren
+                
+                # Parse IMAP LIST format: (flags) "delimiter" mailbox_name
                 match = re.match(r'\([^)]*\)\s+"[^"]*"\s+(.+)', line)
                 if match:
                     folder_name = match.group(1).strip('"')
                     folders.append(folder_name)
                         
             return folders
+            
         except Exception as e:
-            print(f"❌ Fehler beim Abrufen der Mailboxen: {e}")
-            return []    
-    
+            print(Colors.error(f"Error fetching mailboxes: {e}"))
+            return []
+
     def select_mailbox(self, mailbox: str = 'INBOX') -> bool:
         try:
             status, _ = self.imap.select(mailbox, readonly=True)
             if status == 'OK':
-                print(f"✅ Mailbox '{mailbox}' ausgewählt")
+                print(Colors.success(f"Mailbox '{mailbox}' selected"))
                 return True
-            print(f"❌ Konnte Mailbox '{mailbox}' nicht auswählen")
+            print(Colors.error(f"Could not select mailbox '{mailbox}'"))
             return False
         except Exception as e:
-            print(f"❌ Fehler beim Auswählen der Mailbox: {e}")
+            print(Colors.error(f"Error selecting mailbox: {e}"))
             return False
 
     @staticmethod
@@ -120,11 +164,25 @@ class EmailAttachmentExtractor:
 
     @staticmethod
     def sanitize_filename(filename: str) -> str:
+        # Remove invalid characters for all platforms
+        # Windows: < > : " / \ | ? * and ASCII 0-31
+        # Unix/Linux/macOS: mainly / and null
         filename = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '_', filename)
         filename = filename.strip().rstrip('.')
-        if len(filename) > 255:
+        
+        # Windows reserved names
+        if platform.system() == 'Windows':
+            reserved = ['CON', 'PRN', 'AUX', 'NUL'] + [f'COM{i}' for i in range(1,10)] + [f'LPT{i}' for i in range(1,10)]
+            name_without_ext = filename.split('.')[0].upper()
+            if name_without_ext in reserved:
+                filename = f'_{filename}'
+        
+        # Maximum filename length (255 for most systems, but be conservative)
+        max_length = 200
+        if len(filename) > max_length:
             name, ext = os.path.splitext(filename)
-            filename = name[:255 - len(ext)] + ext
+            filename = name[:max_length - len(ext)] + ext
+            
         return filename or 'unnamed'
 
     @staticmethod
@@ -132,8 +190,6 @@ class EmailAttachmentExtractor:
         base = os.path.join(directory, filename)
         if not os.path.exists(base):
             return filename
-        
-        # Bei Duplikaten: füge Zähler vor der Dateiendung ein
         name, ext = os.path.splitext(filename)
         counter = 1
         while True:
@@ -141,7 +197,7 @@ class EmailAttachmentExtractor:
             if not os.path.exists(os.path.join(directory, candidate)):
                 return candidate
             counter += 1
-            
+
     def extract_attachments_from_email(
         self,
         email_id: str,
@@ -152,11 +208,11 @@ class EmailAttachmentExtractor:
     ) -> List[Dict]:
         saved_attachments: List[Dict] = []
 
-        sender = self.decode_mime_string(msg.get('From', 'Unbekannt'))
-        subject = self.decode_mime_string(msg.get('Subject', 'Kein Betreff'))
+        sender = self.decode_mime_string(msg.get('From', 'Unknown'))
+        subject = self.decode_mime_string(msg.get('Subject', 'No Subject'))
         date_str = msg.get('Date', '')
         
-        # Message-ID extrahieren
+        # Extract Message-ID
         message_id = msg.get('Message-ID', '')
         if message_id:
             message_id = message_id.strip('<>')
@@ -167,7 +223,7 @@ class EmailAttachmentExtractor:
             message_id = f"email_{email_id}"
 
         m = re.search(r'<([^>]+)>', sender)
-        sender_email = (m.group(1) if m else sender.split()[:1][0]) if sender and sender != 'Unbekannt' else 'unbekannt'
+        sender_email = (m.group(1) if m else sender.split()[:1][0]) if sender and sender != 'Unknown' else 'unknown'
 
         try:
             email_date = email.utils.parsedate_to_datetime(date_str) if date_str else None
@@ -176,7 +232,7 @@ class EmailAttachmentExtractor:
         
         date_for_filename = (email_date or datetime.now()).strftime('%Y-%m-%d')
         
-        # Basis-Verzeichnis vorbereiten (aber noch NICHT erstellen)
+        # Prepare base directory (but don't create yet)
         target_dir = save_path
         
         if organize_by_sender:
@@ -185,12 +241,12 @@ class EmailAttachmentExtractor:
         if organize_by_date:
             target_dir = os.path.join(target_dir, date_for_filename)
         
-        # E-Mail spezifischer Ordner vorbereiten (aber noch NICHT erstellen)
+        # Email-specific folder (but don't create yet)
         subject_short = self.sanitize_filename(subject[:50])
         email_folder_name = f"{date_for_filename}_{message_id}_{subject_short}"
         email_target_dir = os.path.join(target_dir, email_folder_name)
         
-        # WICHTIG: Erst alle Anhänge sammeln, BEVOR Ordner erstellt werden
+        # Collect all attachments first
         attachments_to_save = []
         attachment_counter = 0
 
@@ -206,10 +262,9 @@ class EmailAttachmentExtractor:
             original_filename = self.decode_mime_string(filename or f'attachment_{attachment_counter}')
             sanitized_filename = self.sanitize_filename(original_filename)
             
-            # Dateiname mit Präfix für bessere Sortierung
+            # Add prefix for better sorting
             new_filename = f"{attachment_counter:02d}_{sanitized_filename}"
             
-            # Sammle Attachment-Daten
             attachments_to_save.append({
                 'part': part,
                 'new_filename': new_filename,
@@ -218,12 +273,10 @@ class EmailAttachmentExtractor:
                 'attachment_number': attachment_counter
             })
         
-        # NUR wenn Anhänge gefunden wurden, erstelle Ordner und speichere
+        # Only create folder and save if attachments were found
         if attachments_to_save:
-            # JETZT erst Ordner erstellen
             os.makedirs(email_target_dir, exist_ok=True)
             
-            # Anhänge speichern
             for att_data in attachments_to_save:
                 part = att_data['part']
                 new_filename = att_data['new_filename']
@@ -239,7 +292,7 @@ class EmailAttachmentExtractor:
                         if isinstance(payload, str):
                             content = payload.encode(errors='replace')
                     if content is None:
-                        raise ValueError("kein Inhalt im MIME-Part")
+                        raise ValueError("No content in MIME part")
 
                     with open(filepath, 'wb') as f:
                         f.write(content)
@@ -264,15 +317,14 @@ class EmailAttachmentExtractor:
                     saved_attachments.append(info)
                     self.statistics['attachments_saved'] += 1
                     self.statistics['total_size_mb'] += size_mb
-                    print(f"  📎 Gespeichert: {email_folder_name}/{unique_filename} ({size_mb} MB)")
+                    print(Colors.info(f"  Saved: {email_folder_name}/{unique_filename} ({size_mb} MB)"))
                     
                 except Exception as e:
-                    msg_err = f"Fehler beim Speichern von {original_filename}: {e}"
-                    print(f"  ❌ {msg_err}")
+                    msg_err = f"Error saving {original_filename}: {e}"
+                    print(Colors.error(f"  {msg_err}"))
                     self.statistics['errors'].append(msg_err)
         else:
-            # Keine Anhänge gefunden - Info ausgeben aber keinen Ordner erstellen
-            print(f"  ℹ️  Keine Anhänge in E-Mail von {sender_email[:30]} - {subject[:50]}")
+            print(Colors.warning(f"  No attachments in email from {sender_email[:30]} - {subject[:50]}"))
 
         return saved_attachments
 
@@ -281,87 +333,15 @@ class EmailAttachmentExtractor:
             status, data = self.imap.search(None, search_criteria)
             if status != 'OK' or not data or not data[0]:
                 return []
-            raw_ids = data[0].split()  # bytes IDs
+            raw_ids = data[0].split()
             ids = [i.decode('ascii', errors='ignore') for i in raw_ids if i]
             if limit is not None:
                 ids = ids[:max(0, int(limit))]
             return ids
         except Exception as e:
-            print(f"❌ Fehler bei der E-Mail-Suche: {e}")
+            print(Colors.error(f"Error searching emails: {e}"))
             return []
 
-    def process_emails(
-        self,
-        save_path: str,
-        search_criteria: str = 'ALL',
-        organize_by_sender: bool = False,
-        organize_by_date: bool = False,
-        limit: Optional[int] = None,
-        save_metadata: bool = True
-    ) -> Dict:
-        os.makedirs(save_path, exist_ok=True)
-
-        print(f"\n🔍 Suche E-Mails mit Kriterium: {search_criteria}")
-        email_ids = self.search_emails(search_criteria, limit)
-        if not email_ids:
-            print("Keine E-Mails gefunden")
-            return self.statistics
-
-        print(f"📧 {len(email_ids)} E-Mail(s) gefunden")
-
-        all_attachments: List[Dict] = []
-
-        for idx, eid in enumerate(email_ids, 1):
-            try:
-                print(f"\nVerarbeite E-Mail {idx}/{len(email_ids)} (ID {eid})...")
-                status, data = self.imap.fetch(eid, '(RFC822)')
-                if status != 'OK' or not data:
-                    raise RuntimeError("Fetch lieferte keine Daten")
-
-                # Daten können mehrteilig sein; suche die Nutzlast
-                raw_email = None
-                for item in data:
-                    if isinstance(item, tuple) and len(item) >= 2 and isinstance(item[1], (bytes, bytearray)):
-                        raw_email = item[1]
-                        break
-                if raw_email is None:
-                    raise RuntimeError("Keine RFC822-Payload gefunden")
-
-                msg = email.message_from_bytes(raw_email, policy=policy.default)
-
-                attachments = self.extract_attachments_from_email(
-                    eid, msg, save_path, organize_by_sender, organize_by_date
-                )
-                all_attachments.extend(attachments)
-                self.statistics['emails_processed'] += 1
-
-            except Exception as e:
-                err = f"Fehler bei E-Mail {eid}: {e}"
-                print(f"❌ {err}")
-                self.statistics['errors'].append(err)
-
-        if save_metadata and all_attachments:
-            metadata_file = os.path.join(save_path, 'anhaenge_metadaten.json')
-            try:
-                with open(metadata_file, 'w', encoding='utf-8') as f:
-                    json.dump({
-                        'extraction_date': datetime.now().isoformat(),
-                        'statistics': self.statistics,
-                        'attachments': all_attachments
-                    }, f, ensure_ascii=False, indent=2)
-                print(f"\n📊 Metadaten gespeichert in: {metadata_file}")
-            except Exception as e:
-                print(f"❌ Fehler beim Speichern der Metadaten: {e}")
-
-        return self.statistics
-
-    def disconnect(self):
-        if self.imap:
-            try:
-                self.imap.logout()
-                print("✅ Verbindung getrennt")
-            except Exception:
-                pass
     def process_mailbox_recursive(
         self,
         mailbox: str,
@@ -373,33 +353,15 @@ class EmailAttachmentExtractor:
         save_metadata: bool = True,
         processed_count: int = 0,
         total_limit: Optional[int] = None
-    ) -> tuple[Dict, int]:
-        """
-        Verarbeitet eine Mailbox und alle ihre Unterordner rekursiv
-        
-        Args:
-            mailbox: Name der zu verarbeitenden Mailbox
-            save_path: Basis-Speicherpfad
-            search_criteria: IMAP-Suchkriterien
-            organize_by_sender: Nach Absender organisieren
-            organize_by_date: Nach Datum organisieren
-            limit: Limit pro Mailbox
-            save_metadata: Metadaten speichern
-            processed_count: Anzahl bereits verarbeiteter E-Mails (für globales Limit)
-            total_limit: Globales Limit über alle Mailboxen
-            
-        Returns:
-            Tuple aus (Statistiken, Anzahl verarbeiteter E-Mails)
-        """
-        print(f"\n📁 Verarbeite Mailbox: {mailbox}")
+    ) -> Tuple[Dict, int]:
+        """Process a mailbox"""
+        print(Colors.info(f"\nProcessing mailbox: {mailbox}"))
         print("-" * 40)
         
-        # Wähle Mailbox aus
         if not self.select_mailbox(mailbox):
-            print(f"⚠️  Überspringe {mailbox} - konnte nicht ausgewählt werden")
+            print(Colors.warning(f"Skipping {mailbox} - could not select"))
             return self.statistics, processed_count
         
-        # Berechne effektives Limit für diese Mailbox
         effective_limit = limit
         if total_limit and processed_count < total_limit:
             remaining = total_limit - processed_count
@@ -408,15 +370,14 @@ class EmailAttachmentExtractor:
             else:
                 effective_limit = remaining
         
-        # Verarbeite E-Mails in dieser Mailbox
-        print(f"🔍 Suche E-Mails mit Kriterium: {search_criteria}")
+        print(Colors.info(f"Searching emails with criteria: {search_criteria}"))
         email_ids = self.search_emails(search_criteria, effective_limit)
         
         if email_ids:
-            print(f"📧 {len(email_ids)} E-Mail(s) in {mailbox} gefunden")
+            print(Colors.info(f"{len(email_ids)} email(s) found in {mailbox}"))
             
-            # Erstelle Unterordner für diese Mailbox im Speicherpfad
-            mailbox_clean = mailbox.replace('/', '_').replace('\\', '_')
+            # Clean mailbox name for filesystem
+            mailbox_clean = mailbox.replace('/', '_').replace('\\', '_').replace(':', '_')
             mailbox_save_path = os.path.join(save_path, mailbox_clean)
             os.makedirs(mailbox_save_path, exist_ok=True)
             
@@ -424,15 +385,15 @@ class EmailAttachmentExtractor:
             
             for idx, eid in enumerate(email_ids, 1):
                 if total_limit and processed_count >= total_limit:
-                    print(f"⚠️  Globales Limit von {total_limit} E-Mails erreicht")
+                    print(Colors.warning(f"Global limit of {total_limit} emails reached"))
                     break
                     
                 try:
-                    print(f"\nVerarbeite E-Mail {idx}/{len(email_ids)} in {mailbox} (ID {eid})...")
+                    print(Colors.info(f"\nProcessing email {idx}/{len(email_ids)} in {mailbox} (ID {eid})..."))
                     status, data = self.imap.fetch(eid, '(RFC822)')
                     
                     if status != 'OK' or not data:
-                        raise RuntimeError("Fetch lieferte keine Daten")
+                        raise RuntimeError("Fetch returned no data")
                     
                     raw_email = None
                     for item in data:
@@ -441,7 +402,7 @@ class EmailAttachmentExtractor:
                             break
                             
                     if raw_email is None:
-                        raise RuntimeError("Keine RFC822-Payload gefunden")
+                        raise RuntimeError("No RFC822 payload found")
                     
                     msg = email.message_from_bytes(raw_email, policy=policy.default)
                     
@@ -453,13 +414,12 @@ class EmailAttachmentExtractor:
                     processed_count += 1
                     
                 except Exception as e:
-                    err = f"Fehler bei E-Mail {eid} in {mailbox}: {e}"
-                    print(f"❌ {err}")
+                    err = f"Error processing email {eid} in {mailbox}: {e}"
+                    print(Colors.error(err))
                     self.statistics['errors'].append(err)
             
-            # Speichere Metadaten für diese Mailbox
             if save_metadata and all_attachments:
-                metadata_file = os.path.join(mailbox_save_path, f'anhaenge_metadaten_{mailbox_clean}.json')
+                metadata_file = os.path.join(mailbox_save_path, f'attachments_metadata_{mailbox_clean}.json')
                 try:
                     with open(metadata_file, 'w', encoding='utf-8') as f:
                         json.dump({
@@ -467,11 +427,11 @@ class EmailAttachmentExtractor:
                             'extraction_date': datetime.now().isoformat(),
                             'attachments': all_attachments
                         }, f, ensure_ascii=False, indent=2)
-                    print(f"📊 Metadaten für {mailbox} gespeichert")
+                    print(Colors.success(f"Metadata saved for {mailbox}"))
                 except Exception as e:
-                    print(f"❌ Fehler beim Speichern der Metadaten für {mailbox}: {e}")
+                    print(Colors.error(f"Error saving metadata for {mailbox}: {e}"))
         else:
-            print(f"ℹ️  Keine E-Mails in {mailbox} gefunden")
+            print(Colors.warning(f"No emails found in {mailbox}"))
         
         return self.statistics, processed_count
 
@@ -485,40 +445,23 @@ class EmailAttachmentExtractor:
         total_limit: Optional[int] = None,
         save_metadata: bool = True
     ) -> Dict:
-        """
-        Verarbeitet INBOX und alle Unterordner
-        
-        Args:
-            save_path: Basis-Speicherpfad
-            search_criteria: IMAP-Suchkriterien
-            organize_by_sender: Nach Absender organisieren
-            organize_by_date: Nach Datum organisieren
-            limit_per_folder: Limit pro Ordner
-            total_limit: Gesamtlimit über alle Ordner
-            save_metadata: Metadaten speichern
-            
-        Returns:
-            Gesamtstatistiken
-        """
-        # Hole alle Mailboxen
+        """Process INBOX and all subfolders"""
         all_mailboxes = self.get_mailboxes()
         
-        # Filtere nur INBOX und INBOX/* Ordner
-        inbox_folders = ['INBOX']  # INBOX selbst immer zuerst
+        inbox_folders = ['INBOX']
         for mb in all_mailboxes:
             if mb.startswith('INBOX/') and mb not in inbox_folders:
                 inbox_folders.append(mb)
         
-        print(f"\n🗂️  Gefundene INBOX-Ordner: {len(inbox_folders)}")
+        print(Colors.info(f"\nFound {len(inbox_folders)} INBOX folder(s):"))
         for folder in inbox_folders:
             print(f"   - {folder}")
         
         processed_count = 0
         
-        # Verarbeite jeden Ordner
         for folder in inbox_folders:
             if total_limit and processed_count >= total_limit:
-                print(f"\n⚠️  Gesamtlimit von {total_limit} E-Mails erreicht")
+                print(Colors.warning(f"\nTotal limit of {total_limit} emails reached"))
                 break
                 
             self.statistics, processed_count = self.process_mailbox_recursive(
@@ -533,9 +476,8 @@ class EmailAttachmentExtractor:
                 total_limit
             )
         
-        # Speichere Gesamt-Metadaten
         if save_metadata:
-            metadata_file = os.path.join(save_path, 'anhaenge_metadaten_gesamt.json')
+            metadata_file = os.path.join(save_path, 'attachments_metadata_total.json')
             try:
                 with open(metadata_file, 'w', encoding='utf-8') as f:
                     json.dump({
@@ -543,130 +485,198 @@ class EmailAttachmentExtractor:
                         'processed_folders': inbox_folders,
                         'statistics': self.statistics
                     }, f, ensure_ascii=False, indent=2)
-                print(f"\n📊 Gesamt-Metadaten gespeichert in: {metadata_file}")
+                print(Colors.success(f"\nTotal metadata saved to: {metadata_file}"))
             except Exception as e:
-                print(f"❌ Fehler beim Speichern der Gesamt-Metadaten: {e}")
+                print(Colors.error(f"Error saving total metadata: {e}"))
         
         return self.statistics
 
+    def process_emails(
+        self,
+        save_path: str,
+        search_criteria: str = 'ALL',
+        organize_by_sender: bool = False,
+        organize_by_date: bool = False,
+        limit: Optional[int] = None,
+        save_metadata: bool = True
+    ) -> Dict:
+        os.makedirs(save_path, exist_ok=True)
 
-def select_external_drive() -> Optional[str]:
-    volumes_path = "/Volumes"
-    volumes = []
-    try:
-        entries = os.listdir(volumes_path)
-    except Exception:
-        print("❌ Keine externen Laufwerke gefunden")
-        return None
+        print(Colors.info(f"\nSearching emails with criteria: {search_criteria}"))
+        email_ids = self.search_emails(search_criteria, limit)
+        if not email_ids:
+            print(Colors.warning("No emails found"))
+            return self.statistics
 
-    for item in entries:
-        p = os.path.join(volumes_path, item)
-        if os.path.isdir(p):
+        print(Colors.info(f"{len(email_ids)} email(s) found"))
+
+        all_attachments: List[Dict] = []
+
+        for idx, eid in enumerate(email_ids, 1):
             try:
-                stat = os.statvfs(p)
-                free_gb = round((stat.f_bavail * stat.f_frsize) / (1024**3), 2)
-                total_gb = round((stat.f_blocks * stat.f_frsize) / (1024**3), 2)
+                print(Colors.info(f"\nProcessing email {idx}/{len(email_ids)} (ID {eid})..."))
+                status, data = self.imap.fetch(eid, '(RFC822)')
+                if status != 'OK' or not data:
+                    raise RuntimeError("Fetch returned no data")
+
+                raw_email = None
+                for item in data:
+                    if isinstance(item, tuple) and len(item) >= 2 and isinstance(item[1], (bytes, bytearray)):
+                        raw_email = item[1]
+                        break
+                if raw_email is None:
+                    raise RuntimeError("No RFC822 payload found")
+
+                msg = email.message_from_bytes(raw_email, policy=policy.default)
+
+                attachments = self.extract_attachments_from_email(
+                    eid, msg, save_path, organize_by_sender, organize_by_date
+                )
+                all_attachments.extend(attachments)
+                self.statistics['emails_processed'] += 1
+
+            except Exception as e:
+                err = f"Error processing email {eid}: {e}"
+                print(Colors.error(err))
+                self.statistics['errors'].append(err)
+
+        if save_metadata and all_attachments:
+            metadata_file = os.path.join(save_path, 'attachments_metadata.json')
+            try:
+                with open(metadata_file, 'w', encoding='utf-8') as f:
+                    json.dump({
+                        'extraction_date': datetime.now().isoformat(),
+                        'statistics': self.statistics,
+                        'attachments': all_attachments
+                    }, f, ensure_ascii=False, indent=2)
+                print(Colors.success(f"\nMetadata saved to: {metadata_file}"))
+            except Exception as e:
+                print(Colors.error(f"Error saving metadata: {e}"))
+
+        return self.statistics
+
+    def disconnect(self):
+        if self.imap:
+            try:
+                self.imap.logout()
+                print(Colors.success("Connection closed"))
             except Exception:
-                free_gb = 'N/A'
-                total_gb = 'N/A'
-            volumes.append({'name': item, 'path': p, 'free_gb': free_gb, 'total_gb': total_gb})
+                pass
+
+
+def get_available_drives() -> Optional[str]:
+    """Get available drives/volumes based on the operating system"""
+    system = platform.system()
+    
+    if system == 'Darwin':  # macOS
+        volumes_path = "/Volumes"
+        volumes = []
+        try:
+            entries = os.listdir(volumes_path)
+        except Exception:
+            print(Colors.error("No external drives found"))
+            return None
+
+        for item in entries:
+            p = os.path.join(volumes_path, item)
+            if os.path.isdir(p):
+                try:
+                    stat = os.statvfs(p)
+                    free_gb = round((stat.f_bavail * stat.f_frsize) / (1024**3), 2)
+                    total_gb = round((stat.f_blocks * stat.f_frsize) / (1024**3), 2)
+                except Exception:
+                    free_gb = 'N/A'
+                    total_gb = 'N/A'
+                volumes.append({'name': item, 'path': p, 'free_gb': free_gb, 'total_gb': total_gb})
+                
+    elif system == 'Windows':
+        import string
+        volumes = []
+        for letter in string.ascii_uppercase:
+            drive = f"{letter}:\\"
+            if os.path.exists(drive):
+                try:
+                    import shutil
+                    total, used, free = shutil.disk_usage(drive)
+                    free_gb = round(free / (1024**3), 2)
+                    total_gb = round(total / (1024**3), 2)
+                    volumes.append({'name': f"Drive {letter}:", 'path': drive, 'free_gb': free_gb, 'total_gb': total_gb})
+                except:
+                    volumes.append({'name': f"Drive {letter}:", 'path': drive, 'free_gb': 'N/A', 'total_gb': 'N/A'})
+                    
+    else:  # Linux and other Unix-like systems
+        volumes = []
+        # Add home directory
+        home = os.path.expanduser("~")
+        try:
+            stat = os.statvfs(home)
+            free_gb = round((stat.f_bavail * stat.f_frsize) / (1024**3), 2)
+            total_gb = round((stat.f_blocks * stat.f_frsize) / (1024**3), 2)
+            volumes.append({'name': 'Home', 'path': home, 'free_gb': free_gb, 'total_gb': total_gb})
+        except:
+            volumes.append({'name': 'Home', 'path': home, 'free_gb': 'N/A', 'total_gb': 'N/A'})
+        
+        # Check for mounted drives in /media and /mnt
+        for mount_point in ['/media', '/mnt']:
+            if os.path.exists(mount_point):
+                try:
+                    for item in os.listdir(mount_point):
+                        p = os.path.join(mount_point, item)
+                        if os.path.ismount(p):
+                            stat = os.statvfs(p)
+                            free_gb = round((stat.f_bavail * stat.f_frsize) / (1024**3), 2)
+                            total_gb = round((stat.f_blocks * stat.f_frsize) / (1024**3), 2)
+                            volumes.append({'name': item, 'path': p, 'free_gb': free_gb, 'total_gb': total_gb})
+                except:
+                    pass
 
     if not volumes:
-        print("❌ Keine externen Laufwerke gefunden")
+        print(Colors.error("No drives found"))
         return None
 
-    print("\n📁 Verfügbare Laufwerke:")
+    print(Colors.info("\nAvailable drives:"))
     print("-" * 60)
     for idx, v in enumerate(volumes, 1):
         if v['free_gb'] != 'N/A':
-            print(f"{idx}. {v['name']} - {v['free_gb']} GB frei von {v['total_gb']} GB")
+            print(f"{idx}. {v['name']} - {v['free_gb']} GB free of {v['total_gb']} GB")
         else:
             print(f"{idx}. {v['name']}")
 
     while True:
-        choice = input(f"\nWählen Sie ein Laufwerk (1-{len(volumes)}) oder 'q' zum Beenden: ").strip()
+        choice = input(Colors.cyan(f"\nSelect a drive (1-{len(volumes)}) or 'q' to quit: ")).strip()
         if choice.lower() == 'q':
             return None
         try:
             i = int(choice) - 1
             if 0 <= i < len(volumes):
                 sel = volumes[i]
-                sub = input(f"\nUnterordner auf {sel['name']} (Enter für Hauptverzeichnis): ").strip()
+                sub = input(Colors.cyan(f"\nSubfolder on {sel['name']} (Enter for root): ")).strip()
                 full = os.path.join(sel['path'], sub) if sub else sel['path']
                 os.makedirs(full, exist_ok=True)
                 return full
         except ValueError:
             pass
-        print("❌ Ungültige Auswahl")
-
-def interactive_setup() -> Dict:
-    print("\n" + "="*60)
-    print("📧 E-MAIL ANHÄNGE EXTRAKTOR - EINRICHTUNG")
-    print("="*60)
-
-    print("\n🏢 E-Mail-Provider auswählen:")
-    print("-" * 40)
-    providers = list(EmailAttachmentExtractor.KNOWN_PROVIDERS.keys()) + ['Andere']
-    for idx, provider in enumerate(providers, 1):
-        print(f"{idx}. {provider}")
-
-    while True:
-        try:
-            choice = input(f"\nWählen Sie Ihren Provider (1-{len(providers)}): ").strip()
-            idx = int(choice) - 1
-            if 0 <= idx < len(providers):
-                selected_provider = providers[idx]
-                break
-            print("❌ Ungültige Auswahl")
-        except ValueError:
-            print("❌ Bitte geben Sie eine Zahl ein")
-
-    if selected_provider == 'Andere':
-        server = input("IMAP-Server-Adresse: ").strip()
-        port_s = input("Port (Standard 993 für SSL): ").strip()
-        port = int(port_s) if port_s else 993
-        use_ssl = input("SSL verwenden? (j/n, Standard j): ").strip().lower() != 'n'
-    else:
-        settings = EmailAttachmentExtractor.KNOWN_PROVIDERS[selected_provider]
-        server, port, use_ssl = settings['server'], settings['port'], settings['ssl']
-        print(f"\n✅ Server-Einstellungen für {selected_provider} geladen")
-
-    print("\n🔐 Anmeldedaten:")
-    print("-" * 40)
-    username = input("E-Mail-Adresse/Benutzername: ").strip()
-    password = getpass.getpass("Passwort: ")
-
-    return {'server': server, 'port': port, 'username': username, 'password': password, 'use_ssl': use_ssl}
+        print(Colors.error("Invalid selection"))
 
 
 def load_config(config_file: str) -> Dict:
-    """
-    Lädt die Konfiguration aus einer JSON-Datei
-    
-    Args:
-        config_file: Pfad zur Konfigurationsdatei
-        
-    Returns:
-        Dictionary mit Konfigurationseinstellungen
-    """
+    """Load configuration from JSON file"""
     try:
-        config_path = Path(config_file)
-        if not config_path.exists():
-            print(f"❌ Konfigurationsdatei '{config_file}' nicht gefunden")
+        if not os.path.exists(config_file):
+            print(Colors.error(f"Configuration file '{config_file}' not found"))
             return None
             
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_file, 'r', encoding='utf-8') as f:
             config = json.load(f)
             
-        # Validiere erforderliche Felder
-        required_fields = ['server', 'username', 'password']
+        required_fields = ['server', 'username']
         missing_fields = [field for field in required_fields if field not in config]
         
         if missing_fields:
-            print(f"❌ Fehlende Felder in Konfiguration: {', '.join(missing_fields)}")
+            print(Colors.error(f"Missing fields in configuration: {', '.join(missing_fields)}"))
             return None
             
-        # Setze Standardwerte für optionale Felder
+        # Set default values for optional fields
         config.setdefault('port', 993)
         config.setdefault('use_ssl', True)
         config.setdefault('mailbox', 'INBOX')
@@ -676,53 +686,96 @@ def load_config(config_file: str) -> Dict:
         config.setdefault('save_metadata', True)
         config.setdefault('save_path', None)
         config.setdefault('limit', None)
+        config.setdefault('recursive', False)
         
-        print(f"✅ Konfiguration geladen aus: {config_file}")
+        print(Colors.success(f"Configuration loaded from: {config_file}"))
         return config
         
     except json.JSONDecodeError as e:
-        print(f"❌ Fehler beim Parsen der JSON-Datei: {e}")
+        print(Colors.error(f"Error parsing JSON file: {e}"))
         return None
     except Exception as e:
-        print(f"❌ Fehler beim Laden der Konfiguration: {e}")
+        print(Colors.error(f"Error loading configuration: {e}"))
         return None
+
+
+def interactive_setup() -> Dict:
+    print("\n" + "="*60)
+    print(Colors.info("EMAIL ATTACHMENT EXTRACTOR - SETUP"))
+    print("="*60)
+
+    print(Colors.info("\nSelect email provider:"))
+    print("-" * 40)
+    providers = list(EmailAttachmentExtractor.KNOWN_PROVIDERS.keys()) + ['Other']
+    for idx, provider in enumerate(providers, 1):
+        print(f"{idx}. {provider}")
+
+    while True:
+        try:
+            choice = input(Colors.cyan(f"\nSelect your provider (1-{len(providers)}): ")).strip()
+            idx = int(choice) - 1
+            if 0 <= idx < len(providers):
+                selected_provider = providers[idx]
+                break
+            print(Colors.error("Invalid selection"))
+        except ValueError:
+            print(Colors.error("Please enter a number"))
+
+    if selected_provider == 'Other':
+        server = input(Colors.cyan("IMAP server address: ")).strip()
+        port_s = input(Colors.cyan("Port (default 993 for SSL): ")).strip()
+        port = int(port_s) if port_s else 993
+        use_ssl = input(Colors.cyan("Use SSL? (y/n, default y): ")).strip().lower() != 'n'
+    else:
+        settings = EmailAttachmentExtractor.KNOWN_PROVIDERS[selected_provider]
+        server, port, use_ssl = settings['server'], settings['port'], settings['ssl']
+        print(Colors.success(f"\nServer settings loaded for {selected_provider}"))
+
+    print(Colors.info("\nLogin credentials:"))
+    print("-" * 40)
+    username = input(Colors.cyan("Email address/username: ")).strip()
+    password = getpass.getpass(Colors.cyan("Password: "))
+
+    return {'server': server, 'port': port, 'username': username, 'password': password, 'use_ssl': use_ssl}
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description='E-Mail Anhänge Extraktor für macOS',
+        description='Cross-Platform Email Attachment Extractor',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    # Konfigurationsdatei als primäre Option
-    parser.add_argument('--config', '-c', help='Pfad zur JSON-Konfigurationsdatei')
+    # Configuration file as primary option
+    parser.add_argument('--config', '-c', help='Path to JSON configuration file')
     
-    # Alle anderen Optionen können die Konfiguration überschreiben
-    parser.add_argument('--server', help='IMAP-Server-Adresse (überschreibt config)')
-    parser.add_argument('--port', type=int, help='IMAP-Port (überschreibt config)')
-    parser.add_argument('--username', help='E-Mail-Adresse/Benutzername (überschreibt config)')
-    parser.add_argument('--password', help='Passwort (überschreibt config)')
-    parser.add_argument('--save-path', help='Speicherpfad für Anhänge (überschreibt config)')
-    parser.add_argument('--mailbox', help='Mailbox/Ordner (überschreibt config)')
-    parser.add_argument('--search', help='IMAP-Suchkriterium (überschreibt config)')
-    parser.add_argument('--organize-by-sender', action='store_true', help='Ordner nach Absender erstellen')
-    parser.add_argument('--organize-by-date', action='store_true', help='Ordner nach Datum erstellen')
-    parser.add_argument('--limit', type=int, help='Maximale Anzahl zu verarbeitender E-Mails')
-    parser.add_argument('--no-metadata', action='store_true', help='Keine Metadaten-JSON speichern')
-    parser.add_argument('--recursive', action='store_true', help='Alle INBOX-Unterordner rekursiv verarbeiten')
-    parser.add_argument('--limit-per-folder', type=int, help='Maximale Anzahl E-Mails pro Ordner (bei rekursiv)')
-    parser.add_argument('--total-limit', type=int, help='Gesamtlimit über alle Ordner (bei rekursiv)')
+    # All other options can override configuration
+    parser.add_argument('--server', help='IMAP server address (overrides config)')
+    parser.add_argument('--port', type=int, help='IMAP port (overrides config)')
+    parser.add_argument('--username', help='Email address/username (overrides config)')
+    parser.add_argument('--password', help='Password (overrides config)')
+    parser.add_argument('--save-path', help='Save path for attachments (overrides config)')
+    parser.add_argument('--mailbox', help='Mailbox/folder (overrides config)')
+    parser.add_argument('--search', help='IMAP search criteria (overrides config)')
+    parser.add_argument('--organize-by-sender', action='store_true', help='Create folders by sender')
+    parser.add_argument('--organize-by-date', action='store_true', help='Create folders by date')
+    parser.add_argument('--limit', type=int, help='Maximum number of emails to process')
+    parser.add_argument('--no-metadata', action='store_true', help='Do not save metadata JSON')
+    parser.add_argument('--recursive', action='store_true', help='Process all INBOX subfolders recursively')
+    parser.add_argument('--limit-per-folder', type=int, help='Maximum emails per folder (for recursive)')
+    parser.add_argument('--total-limit', type=int, help='Total limit across all folders (for recursive)')
 
     args = parser.parse_args()
 
-    # Initialisiere Konfiguration
+    # Initialize configuration
     config = {}
     
-    # Lade Konfiguration aus Datei wenn angegeben
+    # Load configuration from file if specified
     if args.config:
         config = load_config(args.config)
         if config is None:
             sys.exit(1)
     
-    # Überschreibe mit Kommandozeilen-Argumenten
+    # Override with command line arguments
     if args.server:
         config['server'] = args.server
     if args.port:
@@ -745,19 +798,20 @@ def main():
         config['limit'] = args.limit
     if args.no_metadata:
         config['save_metadata'] = False
+    if args.recursive:
+        config['recursive'] = True
 
-    # Falls keine Konfiguration geladen wurde und keine Server-Daten vorhanden sind, 
-    # starte interaktive Einrichtung
+    # If no configuration loaded and no server data available, start interactive setup
     if not config.get('server') or not config.get('username'):
-        print("\n⚠️  Keine vollständige Konfiguration gefunden. Starte interaktive Einrichtung...")
+        print(Colors.warning("\nNo complete configuration found. Starting interactive setup..."))
         settings = interactive_setup()
         config.update(settings)
     
-    # Passwort abfragen falls nicht in Konfiguration
+    # Request password if not in configuration
     if not config.get('password'):
-        config['password'] = getpass.getpass(f"Passwort für {config['username']}: ")
+        config['password'] = getpass.getpass(Colors.cyan(f"Password for {config['username']}: "))
 
-    # Extractor initialisieren
+    # Initialize extractor
     extractor = EmailAttachmentExtractor(
         config['server'],
         config.get('port', 993),
@@ -767,15 +821,15 @@ def main():
     )
 
     if not extractor.connect():
-        print("❌ Verbindung fehlgeschlagen")
+        print(Colors.error("Connection failed"))
         sys.exit(1)
 
-    # Mailbox auswählen
+    # Select mailbox
     mailbox = config.get('mailbox', 'INBOX')
     
-    # Wenn keine spezifische Mailbox in config, zeige verfügbare an
+    # If no specific mailbox in config, show available
     if mailbox == 'INBOX' and not args.config:
-        print("\n📬 Verfügbare Mailboxen:")
+        print(Colors.info("\nAvailable mailboxes:"))
         print("-" * 40)
         mailboxes = extractor.get_mailboxes()
         
@@ -783,7 +837,7 @@ def main():
             for idx, mb in enumerate(mailboxes, 1):
                 print(f"{idx}. {mb}")
             
-            choice = input(f"\nMailbox wählen (1-{len(mailboxes)}, Enter für INBOX): ").strip()
+            choice = input(Colors.cyan(f"\nSelect mailbox (1-{len(mailboxes)}, Enter for INBOX): ")).strip()
             if choice:
                 try:
                     i = int(choice) - 1
@@ -792,38 +846,37 @@ def main():
                 except ValueError:
                     pass
 
-    if not extractor.select_mailbox(mailbox):
-        print(f"❌ Mailbox '{mailbox}' konnte nicht ausgewählt werden")
-        sys.exit(1)
+    if not config.get('recursive', False) and not args.recursive:
+        if not extractor.select_mailbox(mailbox):
+            print(Colors.error(f"Could not select mailbox '{mailbox}'"))
+            sys.exit(1)
 
-    # Speicherpfad bestimmen
+    # Determine save path
     save_path = config.get('save_path')
     if not save_path:
-        print("\n💾 Speicherort wählen:")
+        print(Colors.info("\nSelect save location:"))
         print("-" * 40)
-        save_path = select_external_drive()
+        save_path = get_available_drives()
         if not save_path:
-            save_path = input("\nSpeicherpfad eingeben (Enter = aktuelles Verzeichnis): ").strip()
+            save_path = input(Colors.cyan("\nEnter save path (Enter = current directory): ")).strip()
             if not save_path:
-                save_path = os.path.join(os.getcwd(), f"email_anhaenge_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+                save_path = os.path.join(os.getcwd(), f"email_attachments_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
 
-    print(f"\n📂 Speicherpfad: {save_path}")
-    print(f"📧 Suchkriterium: {config.get('search_criteria', 'ALL')}")
-    print(f"📁 Nach Absender organisieren: {'Ja' if config.get('organize_by_sender') else 'Nein'}")
-    print(f"📅 Nach Datum organisieren: {'Ja' if config.get('organize_by_date') else 'Nein'}")
+    print(Colors.info(f"\nSave path: {save_path}"))
+    print(Colors.info(f"Search criteria: {config.get('search_criteria', 'ALL')}"))
+    print(Colors.info(f"Organize by sender: {'Yes' if config.get('organize_by_sender') else 'No'}"))
+    print(Colors.info(f"Organize by date: {'Yes' if config.get('organize_by_date') else 'No'}"))
     if config.get('limit'):
-        print(f"🔢 Limit: {config['limit']} E-Mails")
+        print(Colors.info(f"Limit: {config['limit']} emails"))
 
     print("\n" + "="*60)
-    print("🚀 STARTE VERARBEITUNG")
-    print("\n" + "="*60)
-    print("🚀 STARTE VERARBEITUNG")
+    print(Colors.info("STARTING PROCESSING"))
     print("="*60)
 
     try:
-        # Prüfe ob rekursive Verarbeitung gewünscht ist
+        # Check if recursive processing is desired
         if args.recursive or config.get('recursive', False):
-            print("\n🔄 Rekursive Verarbeitung aller INBOX-Ordner aktiviert")
+            print(Colors.info("\nRecursive processing of all INBOX folders enabled"))
             
             statistics = extractor.process_all_inbox_folders(
                 save_path=save_path,
@@ -835,7 +888,7 @@ def main():
                 save_metadata=config.get('save_metadata', True)
             )
         else:
-            # Normale Verarbeitung einer einzelnen Mailbox
+            # Normal processing of a single mailbox
             statistics = extractor.process_emails(
                 save_path=save_path,
                 search_criteria=config.get('search_criteria', 'ALL'),
@@ -844,29 +897,30 @@ def main():
                 limit=config.get('limit'),
                 save_metadata=config.get('save_metadata', True)
             )
+
         print("\n" + "="*60)
-        print("✅ VERARBEITUNG ABGESCHLOSSEN")
+        print(Colors.success("PROCESSING COMPLETED"))
         print("="*60)
-        print(f"📧 E-Mails verarbeitet: {statistics['emails_processed']}")
-        print(f"📎 Anhänge gespeichert: {statistics['attachments_saved']}")
-        print(f"💾 Gesamtgröße: {statistics['total_size_mb']:.2f} MB")
+        print(Colors.info(f"Emails processed: {statistics['emails_processed']}"))
+        print(Colors.info(f"Attachments saved: {statistics['attachments_saved']}"))
+        print(Colors.info(f"Total size: {statistics['total_size_mb']:.2f} MB"))
 
         if statistics['errors']:
-            print(f"\n⚠️  {len(statistics['errors'])} Fehler aufgetreten:")
+            print(Colors.warning(f"\n{len(statistics['errors'])} error(s) occurred:"))
             for err in statistics['errors'][:5]:
-                print(f"   - {err}")
+                print(Colors.error(f"   - {err}"))
             if len(statistics['errors']) > 5:
-                print(f"   ... und {len(statistics['errors']) - 5} weitere")
+                print(Colors.warning(f"   ... and {len(statistics['errors']) - 5} more"))
 
-        print(f"\n📂 Anhänge gespeichert in: {save_path}")
+        print(Colors.success(f"\nAttachments saved to: {save_path}"))
 
     except KeyboardInterrupt:
-        print("\n\n⚠️  Verarbeitung abgebrochen")
+        print(Colors.warning("\n\nProcessing interrupted by user"))
     except Exception as e:
-        print(f"\n❌ Unerwarteter Fehler: {e}")
+        print(Colors.error(f"\nUnexpected error: {e}"))
     finally:
         extractor.disconnect()
-        
+
+
 if __name__ == "__main__":
     main()
-
