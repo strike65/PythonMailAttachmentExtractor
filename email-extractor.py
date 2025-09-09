@@ -16,6 +16,7 @@ import os
 import sys
 import getpass
 import re
+import fnmatch
 from datetime import datetime
 from pathlib import Path
 import argparse
@@ -166,7 +167,54 @@ class EmailAttachmentExtractor:
             return ''.join(out)
         except Exception:
             return s
-
+    @staticmethod
+    def matches_pattern(filename: str, patterns: List[str]) -> bool:
+        """
+        Checks if filename contains a pattern
+        Supports wildcards
+        
+        Args:
+            filename: filename to check
+            patterns: List of von patterns
+            
+        Returns:
+            True if filename contains at least one pattern
+        """
+        """
+        Wildcard-Matching Implementierung.
+        Bleibt unverändert - die Logik-Korrektur erfolgt in extract_attachments_from_email
+        """
+        if not patterns:
+            return False
+            
+        filename_lower = filename.lower()
+        
+        for pattern in patterns:
+            if pattern is None:
+                continue
+                
+            pattern_lower = pattern.lower().strip()
+            
+            # Fall 1: Pattern ist nur "*" - matche ALLES
+            if pattern_lower == '*':
+                return True
+            
+            # Fall 2: Einfache Extension ohne Wildcards
+            elif not any(c in pattern_lower for c in ['*', '?', '[', ']']):
+                if not pattern_lower.startswith('.'):
+                    ext_pattern = '.' + pattern_lower
+                else:
+                    ext_pattern = pattern_lower
+                if filename_lower.endswith(ext_pattern):
+                    return True
+            
+            # Fall 3: Pattern enthält Wildcards - verwende fnmatch
+            else:
+                if fnmatch.fnmatch(filename_lower, pattern_lower):
+                    return True
+                    
+        return False
+    
     @staticmethod
     def sanitize_filename(filename: str) -> str:
         # Remove invalid characters for all platforms
@@ -213,13 +261,16 @@ class EmailAttachmentExtractor:
         allowed_extensions: Optional[List[str]] = None,  # NEU
         excluded_extensions: Optional[List[str]] = None   # NEU
     ) -> List[Dict]:
+        """
+        Verbesserte Version der extract_attachments_from_email Methode
+        mit korrigierter Extension-Filterung und Wildcard-Support
+        """
         saved_attachments: List[Dict] = []
 
         sender = self.decode_mime_string(msg.get('From', 'Unknown'))
         subject = self.decode_mime_string(msg.get('Subject', 'No Subject'))
         date_str = msg.get('Date', '')
         
-        # Extract Message-ID
         message_id = msg.get('Message-ID', '')
         if message_id:
             message_id = message_id.strip('<>')
@@ -233,13 +284,15 @@ class EmailAttachmentExtractor:
         sender_email = (m.group(1) if m else sender.split()[:1][0]) if sender and sender != 'Unknown' else 'unknown'
 
         try:
+            import email.utils
+            from datetime import datetime
             email_date = email.utils.parsedate_to_datetime(date_str) if date_str else None
         except Exception:
+            from datetime import datetime
             email_date = None
         
         date_for_filename = (email_date or datetime.now()).strftime('%Y-%m-%d')
         
-        # Prepare base directory (but don't create yet)
         target_dir = save_path
         
         if organize_by_sender:
@@ -248,15 +301,19 @@ class EmailAttachmentExtractor:
         if organize_by_date:
             target_dir = os.path.join(target_dir, date_for_filename)
         
-        # Email-specific folder (but don't create yet)
         subject_short = self.sanitize_filename(subject[:50])
         email_folder_name = f"{date_for_filename}_{message_id}_{subject_short}"
         email_target_dir = os.path.join(target_dir, email_folder_name)
         
-        # Collect all attachments first
         attachments_to_save = []
         attachment_counter = 0
-        should_skip = False
+        
+        # Debug-Ausgabe für Patterns
+        if allowed_extensions:
+            print(Colors.info(f"  Allowed patterns: {allowed_extensions}"))
+        if excluded_extensions:
+            print(Colors.info(f"  Excluded patterns: {excluded_extensions}"))
+        
         for part in msg.walk():
             disp = part.get_content_disposition()
             filename = part.get_filename()
@@ -265,38 +322,29 @@ class EmailAttachmentExtractor:
             if not is_attachment:
                 continue
 
-            # attachment_counter += 1
             original_filename = self.decode_mime_string(filename or f'attachment_{attachment_counter}')
             sanitized_filename = self.sanitize_filename(original_filename)
-           
-            _, ext = os.path.splitext(sanitized_filename)
-            ext = ext.lower()
             
-            if excluded_extensions:
-                # Filter out None values and normalize extensions
-                excluded_exts_lower = [
-                    e.lower() if e.startswith('.') else f'.{e.lower()}' 
-                    for e in excluded_extensions if e is not None
-                ]
-                
-                if ext in excluded_exts_lower:
-                    print(Colors.warning(f"  Skipping {original_filename} - extension '{ext}' is excluded"))
-                    should_skip = True
-
-            # Check allowed extensions (only if not already excluded)
-            if not should_skip and allowed_extensions:
-                # Filter out None values and normalize extensions
-                allowed_exts_lower = [
-                    e.lower() if e.startswith('.') else f'.{e.lower()}' 
-                    for e in allowed_extensions if e is not None
-                ]
-                
-                if ext not in allowed_exts_lower:
-                    print(Colors.warning(f"  Skipping {original_filename} - extension '{ext}' not in allowed list"))
-                    should_skip = True
-            if should_skip:
-                continue
-            attachment_counter +=1
+            # KORRIGIERTE LOGIK:
+            # 1. ZUERST prüfe exclusions (haben IMMER Vorrang)
+            if excluded_extensions and self.matches_pattern(sanitized_filename, excluded_extensions):
+                print(Colors.warning(f"  Skipping {original_filename} - matches exclusion pattern"))
+                continue  # Skip direkt, keine weitere Prüfung
+            
+            # 2. DANN prüfe allowed (nur wenn nicht excluded)
+            if allowed_extensions:
+                if self.matches_pattern(sanitized_filename, allowed_extensions):
+                    print(Colors.info(f"  Including {original_filename}"))
+                else:
+                    print(Colors.warning(f"  Skipping {original_filename} - doesn't match allowed patterns"))
+                    continue  # Skip wenn nicht in allowed
+            else:
+                # Keine allowed_extensions definiert = alles erlaubt (außer excluded)
+                print(Colors.info(f"  Including {original_filename} (no restrictions)"))
+            
+            # Wenn wir hier ankommen, wird die Datei inkludiert
+            attachment_counter += 1
+            
             # Add prefix for better sorting
             new_filename = f"{attachment_counter:02d}_{sanitized_filename}"
             
@@ -307,8 +355,7 @@ class EmailAttachmentExtractor:
                 'sanitized_filename': sanitized_filename,
                 'attachment_number': attachment_counter
             })
-        
-        # Only create folder and save if attachments were found
+                 
         if attachments_to_save:
             os.makedirs(email_target_dir, exist_ok=True)
             
@@ -352,17 +399,18 @@ class EmailAttachmentExtractor:
                     saved_attachments.append(info)
                     self.statistics['attachments_saved'] += 1
                     self.statistics['total_size_mb'] += size_mb
-                    print(Colors.info(f"  Saved: {email_folder_name}/{unique_filename} ({size_mb} MB)"))
+                    print(f"  Saved: {email_folder_name}/{unique_filename} ({size_mb} MB)")
+                    pass
                     
                 except Exception as e:
                     msg_err = f"Error saving {original_filename}: {e}"
-                    print(Colors.error(f"  {msg_err}"))
+                    print(f"  {msg_err}")
                     self.statistics['errors'].append(msg_err)
         else:
-            print(Colors.warning(f"  No attachments in email from {sender_email[:30]} - {subject[:50]}"))
+            print(f"  No attachments in email from {sender_email[:30]} - {subject[:50]}")
 
         return saved_attachments
-
+    
     def search_emails(self, search_criteria: str = 'ALL', limit: Optional[int] = None) -> List[str]:
         try:
             status, data = self.imap.search(None, search_criteria)

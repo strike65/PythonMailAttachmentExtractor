@@ -1,626 +1,276 @@
-# Email Attachment Extractor v1.0.0
-
-A cross-platform Python tool for extracting email attachments from IMAP mailboxes with advanced filtering capabilities. Supports recursive folder processing, intelligent organization, and works on Windows, Linux, and macOS.
-
+# Email Attachment Extractor
+A powerful cross-platform Python tool for extracting attachments from email accounts via IMAP. Supports Windows, Linux, and macOS with advanced filtering options including wildcard patterns.
+---
 ## Features
-
-- 📧 **IMAP Support**: Connect to any IMAP email server (Gmail, Outlook, iCloud, Yahoo, etc.)
-- 🔄 **Recursive Processing**: Process INBOX and all subfolders automatically
-- 📁 **Smart Organization**: Organize attachments by date, sender, or both
-- 🎯 **Advanced Filtering**: Filter attachments by file type (whitelist/blacklist)
-- 🎨 **Colored Terminal Output**: Clear visual feedback with color-coded messages
-- 💾 **Metadata Tracking**: Save detailed JSON metadata about extracted attachments
-- 🔐 **Secure**: Supports SSL/TLS connections
-- 🖥️ **Cross-Platform**: Works on Windows, Linux, and macOS
-- 🍎 **iCloud Optimized**: Special handling for Apple iCloud email servers
-
-## Requirements
-
-- Python 3.7 or higher
-- No external dependencies (uses only Python standard library)
-
+- 🌐 **Cross-platform** compatibility (Windows, Linux, macOS)
+- 📧 **Multiple** email provider support (Gmail, Outlook, iCloud, Yahoo, GMX, Web.de, custom IMAP)
+- 📁 **Smart organization of attachments** by sender and/or date
+- 🔍 **Advanced filtering** with wildcard pattern support
+- 📊 **Comprehensive metadata** export (JSON format)
+- 🎨 **Colored terminal output** for better readability
+- 🔄 **Recursive mailbox processing** (process INBOX and all subfolders)
+- ⚙️ **Configuration** file support for automation
+- 🛡️ **Safe filename handling** across all platforms
 ## Installation
-
-1. Clone or download the script:
+### Prerequisites
+- Python 3.6 or higher
+- pip (Python package installer)
+#### Required Python Libraries
 ```bash
-git clone https://github.com/yourusername/email-attachment-extractor.git
-cd email-attachment-extractor
+pip install imaplib email pathlib
 ```
-
-2. Make the script executable (Linux/macOS):
-```bash
-chmod +x email_extractor.py
-```
-
-## Quick Start
-
+**Note: Most required libraries are part of Python's standard library.**
+---
+## Quick Start 
 ### Interactive Mode
-Simply run the script without arguments for guided setup:
+Simply run the script without arguments for interactive setup:
 ```bash
-python3 email_extractor.py
-```
+python email_attachment_extractor.py
 
-### With Configuration File
-Create a configuration file and run:
+```
+### Command Line Mode
 ```bash
-python3 email_extractor.py --config config.json
+python email_attachment_extractor.py \
+    --server imap.gmail.com \
+    --username your.email@gmail.com \
+    --save-path ./attachments \
+    --organize-by-date \
+    --file-types pdf docx xlsx
 ```
-
-### Command Line Arguments
+### Configuration File Mode
 ```bash
-python3 email_extractor.py --server imap.gmail.com --username your@email.com --recursive --file-types pdf docx
+python email_attachment_extractor.py --config config.json
 ```
-
-## Configuration File Format
-
-Create a `config.json` file with your email settings:
-
+## Configuration File
+Create a config.json file for automated extraction:
 ```json
 {
-    "server": "imap.gmail.com",
-    "port": 993,
-    "username": "your.email@gmail.com",
-    "password": "your-app-password",
-    "use_ssl": true,
-    "mailbox": "INBOX",
-    "search_criteria": "ALL",
-    "organize_by_sender": false,
-    "organize_by_date": true,
-    "save_path": "/path/to/save/attachments",
-    "recursive": true,
-    "limit_per_folder": 100,
-    "total_limit": 1000,
-    "save_metadata": true,
-    "allowed_extensions": "*",
-    "excluded_extensions": ["exe", "bat"]
+  "server": "imap.gmail.com",
+  "port": 993,
+  "username": "your.email@gmail.com",
+  "password": "your_app_password",
+  "use_ssl": true,
+  "mailbox": "INBOX",
+  "search_criteria": "ALL",
+  "organize_by_sender": false,
+  "organize_by_date": true,
+  "save_path": "/path/to/save/attachments",
+  "limit": 100,
+  "save_metadata": true,
+  "allowed_extensions": ["pdf", "*.doc*", "*.xls*"],
+  "excluded_extensions": ["exe", "bat", "*.tmp"]
 }
 ```
-
-### File Type Filtering Options
-
-The `allowed_extensions` field supports multiple formats:
-- `"*"` - Allow all file types (default)
-- `null` - Allow all file types
-- `["pdf", "docx", "jpg"]` - Only allow specified types
-- `[]` - Block all attachments (empty list)
-- Not specified - Allow all file types
-
-The `excluded_extensions` field:
-- `["exe", "bat", "cmd"]` - Block specified file types
-- `null` or not specified - Don't exclude any types
-- Takes priority over `allowed_extensions`
-
+## Wildcard Pattern Support
+The tool supports Unix-style wildcard patterns for flexible file filtering:
+Pattern Syntax
+```bash
+* - matches any number of characters
+? - matches exactly one character
+[seq] - matches any character in seq
+[!seq] - matches any character not in seq
+```
+## Examples
+### Allow All Files Except Dangerous
+```json
+{
+  "allowed_extensions": ["*"],
+  "excluded_extensions": ["exe", "bat", "sh", "dll", "scr"]
+}
+```
+### Only Office Documents
+```json
+{
+  "allowed_extensions": ["*.doc*", "*.xls*", "*.ppt*", "pdf"],
+  "excluded_extensions": null
+}
+```
+### Complex Pattern Matching
+```json
+{
+  "allowed_extensions": [
+    "report_*.pdf",      // PDFs starting with "report_"
+    "invoice_*.pdf",     // PDFs starting with "invoice_"
+    "IMG_*.jpg",         // JPEGs starting with "IMG_"
+    "backup_20??.*",     // Backups from 2000-2099
+    "data_*.csv"         // CSV files starting with "data_"
+  ],
+  "excluded_extensions": [
+    "*_draft.*",         // All draft files
+    "*_temp.*",          // All temporary files
+    "~*",                // All backup files (starting with ~)
+    "*.bak",             // All .bak files
+    "test_*"             // All files starting with "test_"
+  ]
+}
+```
 ## Command Line Options
 
-| Option | Description |
-|--------|-------------|
-| `--config FILE` | Load configuration from JSON file |
-| `--server SERVER` | IMAP server address |
-| `--port PORT` | IMAP port (default: 993) |
-| `--username EMAIL` | Email address/username |
-| `--password PASS` | Password (not recommended in CLI) |
-| `--save-path PATH` | Directory to save attachments |
-| `--mailbox FOLDER` | Specific mailbox to process (default: INBOX) |
-| `--search CRITERIA` | IMAP search criteria (default: ALL) |
-| `--organize-by-sender` | Create folders organized by sender |
-| `--organize-by-date` | Create folders organized by date |
-| `--recursive` | Process all INBOX subfolders |
-| `--limit N` | Maximum emails to process |
-| `--limit-per-folder N` | Maximum emails per folder (recursive mode) |
-| `--total-limit N` | Total limit across all folders |
-| `--file-types EXT [EXT...]` | Allowed file extensions (whitelist) |
-| `--exclude-types EXT [EXT...]` | Excluded file extensions (blacklist) |
-| `--no-metadata` | Don't save metadata JSON files |
+| Option| Description| Example|
+|-------|------------|--------|
+| `--config, -c`| Path to JSON configuration file| `--config config.json`|
+| `--server`             | IMAP server address                 | `--server imap.gmail.com`                  |
+| `--port`               | IMAP port (default: 993)            | `--port 993`                               |
+| `--username`           | Email address/username              | `--username user@example.com`              |
+| `--password`           | Password (prompt if not provided)   | `--password mypassword`                    |
+| `--save-path`          | Directory to save attachments       | `--save-path ./attachments`                |
+| `--mailbox`            | Mailbox/folder to process           | `--mailbox INBOX`                          |
+| `--search`             | IMAP search criteria                | `--search "SINCE 01-Jan-2024"`             |
+| `--organize-by-sender` | Create folders by sender            | `--organize-by-sender`                     |
+| `--organize-by-date`   | Create folders by date              | `--organize-by-date`                       |
+| `--limit`              | Max emails to process               | `--limit 50`                               |
+| `--recursive`          | Process all INBOX subfolders        | `--recursive`                              |
+| `--limit-per-folder`.  | Max emails per folder (recursive)   | `--limit-per-folder 100`                   |
+| `--total-limit`        | Total limit across all folders      | `--total-limit 500`                        |
+| `--file-types`         | Allowed file extensions/patterns    | `--file-types pdf "*.doc*" "*.xls*"`       |
+| `--exclude-types`      | Excluded file extensions/patterns   | `--exclude-types exe bat "*.tmp"`          |
+| `--no-metadata`        | Don't save metadata JSON            | `--no-metadata`                            |
 
-## File Type Filtering Examples
-
-### Allow only specific types (whitelist):
-```bash
-# Only PDFs and Word documents
-python3 email_extractor.py --config config.json --file-types pdf docx doc
-
-# Only images
-python3 email_extractor.py --config config.json --file-types jpg jpeg png gif bmp
-
-# Only spreadsheets
-python3 email_extractor.py --config config.json --file-types xls xlsx csv ods
-```
-
-### Exclude specific types (blacklist):
-```bash
-# Everything except executables
-python3 email_extractor.py --config config.json --exclude-types exe bat cmd sh
-
-# All documents except encrypted ones
-python3 email_extractor.py --config config.json --file-types pdf docx --exclude-types pgp gpg
-```
-
-### Configuration file examples:
-```json
-{
-    "allowed_extensions": "*",
-    "excluded_extensions": ["exe", "zip", "rar"]
-}
-
-{
-    "allowed_extensions": ["pdf", "docx", "xlsx", "jpg", "png"]
-}
-
-{
-    "allowed_extensions": [],
-    "comment": "This blocks ALL attachments"
-}
-```
-
-## IMAP Search Criteria Examples
-
-- `ALL` - All emails
-- `UNSEEN` - Unread emails only
-- `FROM "sender@email.com"` - Emails from specific sender
-- `SINCE 1-Jan-2024` - Emails since specific date
-- `SUBJECT "Invoice"` - Emails with specific subject
-- `LARGER 1000000` - Emails with attachments larger than 1MB
-- `BEFORE 31-Dec-2024` - Emails before specific date
-- `TEXT "keyword"` - Emails containing keyword
-
-## Provider-Specific Setup
-
-### Gmail
-1. Enable 2-factor authentication
-2. Generate an app-specific password: https://myaccount.google.com/apppasswords
-3. Use the app password instead of your regular password
-
-### Outlook/Office 365
-1. If using 2FA, generate an app password
-2. Server: `outlook.office365.com`
-
-### iCloud
-1. Generate an app-specific password: https://appleid.apple.com/account/manage
-2. Server: `imap.mail.me.com`
-3. The script includes special optimizations for iCloud's IMAP implementation
-
-### Yahoo
-1. Generate app password in Account Security settings
-2. Server: `imap.mail.yahoo.com`
-
-## Output Structure
-
-The script creates the following folder structure:
+## IMAP Search Criteria
+### Common IMAP search criteria for the search_criteria field:
+- ALL - All messages (default)
+- UNSEEN - Unread messages only
+- SEEN - Read messages only
+- SINCE 01-Jan-2024 - Messages since date
+- BEFORE 31-Dec-2024 - Messages before date
+- FROM "sender@example.com" - Messages from specific sender
+- SUBJECT "Invoice" - Messages with subject containing text
+- LARGER 1000000 - Messages larger than size (in bytes)
+- OR UNSEEN FLAGGED - Unread OR flagged messages
+- NOT DELETED - Non-deleted messages
+### Output Structure
+The tool creates an organized folder structure:
 
 ```
 save_path/
 ├── INBOX/
-│   └── 2024-12-15/
-│       └── 2024-12-15_MessageID_Subject/
-│           ├── 01_attachment1.pdf
-│           └── 02_attachment2.docx
-├── INBOX_subfolder/
-│   └── 2024-12-14/
-│       └── 2024-12-14_MessageID_Subject/
-│           └── 01_document.xlsx
+│   ├── sender1@example.com/
+│   │   ├── 2024-01-15/
+│   │   │   ├── 2024-01-15_MSG001_Subject/
+│   │   │   │   ├── 01_document.pdf
+│   │   │   │   └── 02_image.jpg
+│   │   │   └── 2024-01-15_MSG002_Another_Subject/
+│   │   │       └── 01_report.xlsx
+│   │   └── 2024-01-16/
+│   │       └── ...
+│   └── attachments_metadata_INBOX.json
+├── INBOX_Subfolder/
+│   └── ...
 └── attachments_metadata_total.json
 ```
 
-### File Naming Convention
-- Each email gets its own folder: `YYYY-MM-DD_MessageID_Subject/`
-- Attachments are numbered: `01_filename.ext`, `02_filename.ext`
-- Filtered attachments are skipped and don't affect numbering
-- Metadata JSON files track all extracted attachments
-
-## Examples
-
-### Extract all PDFs from Gmail
-```bash
-python3 email_extractor.py \
-    --server imap.gmail.com \
-    --username your@gmail.com \
-    --recursive \
-    --file-types pdf \
-    --organize-by-date
-```
-
-### Process unread emails, exclude executables
-```bash
-python3 email_extractor.py \
-    --config config.json \
-    --search "UNSEEN" \
-    --exclude-types exe bat cmd sh
-```
-
-### Extract from specific sender with file type filter
-```bash
-python3 email_extractor.py \
-    --config config.json \
-    --search 'FROM "client@company.com"' \
-    --file-types pdf docx xlsx \
-    --limit 50
-```
-
-### Process specific date range with filters
-```bash
-python3 email_extractor.py \
-    --config config.json \
-    --search "SINCE 1-Jan-2024 BEFORE 31-Jan-2024" \
-    --file-types pdf jpg png \
-    --exclude-types encrypted.pdf
-```
-
-## Color Output Guide
-
-The script uses colored terminal output for better readability:
-- **Cyan**: Information and progress messages
-- **Green**: Success messages
-- **Yellow**: Warnings (e.g., filtered attachments)
-- **Red**: Errors
-
-## Security Considerations
-
-1. **Never commit passwords**: Don't include passwords in config files that will be version controlled
-2. **Use app-specific passwords**: Most providers support app passwords for better security
-3. **File permissions**: Ensure config files with passwords have restricted permissions:
-   ```bash
-   chmod 600 config.json
-   ```
-4. **Use environment variables**: Consider storing passwords in environment variables:
-   ```bash
-   export EMAIL_PASSWORD="your-password"
-   ```
-
-## Troubleshooting
-
-### Connection Issues
-- Verify server address and port
-- Check if your email provider requires app-specific passwords
-- Ensure IMAP is enabled in your email settings
-- Check firewall/antivirus settings
-
-### No Attachments Found
-- Verify the search criteria matches your emails
-- Check if emails actually have attachments (not inline images)
-- Review file type filters - ensure they're not too restrictive
-- Try with `--file-types "*"` or without filters first
-
-### iCloud Specific Issues
-- The script includes special handling for iCloud's IMAP quirks
-- If headers show as "Unknown" or "No Subject", the script will automatically adjust
-- Make sure to use app-specific password from Apple ID settings
-
-### File Type Filtering Issues
-- Extensions are case-insensitive (PDF = pdf = Pdf)
-- You can specify with or without dot (.pdf or pdf)
-- Check if `allowed_extensions` is not an empty list `[]`
-- Remember `excluded_extensions` takes priority over `allowed_extensions`
-
-### Permission Errors
-- Ensure you have write permissions to the save path
-- On Windows, run as administrator if saving to system directories
-- Check disk space availability
-
-### Memory Issues with Large Mailboxes
-- Use `--limit` to process emails in batches
-- Use `--limit-per-folder` in recursive mode
-- Process specific date ranges with `--search "SINCE date BEFORE date"`
-
-## Metadata Format
-
-The script saves metadata in JSON format with the following structure:
-
+### Metadata Format
+The tool saves detailed metadata in JSON format:
 ```json
 {
-    "extraction_date": "2024-12-15T10:30:00",
-    "processed_folders": ["INBOX", "INBOX/Subfolder"],
-    "statistics": {
-        "emails_processed": 150,
-        "attachments_saved": 423,
-        "total_size_mb": 1250.5,
-        "errors": []
-    },
-    "attachments": [
-        {
-            "filename": "01_document.pdf",
-            "original_filename": "document.pdf",
-            "filepath": "/path/to/file",
-            "size_mb": 2.5,
-            "sender": "sender@email.com",
-            "subject": "Email Subject",
-            "date": "2024-12-15T09:00:00",
-            "message_id": "ABC123"
-        }
-    ]
+  "extraction_date": "2024-01-15T10:30:00",
+  "mailbox": "INBOX",
+  "attachments": [
+    {
+      "filename": "01_document.pdf",
+      "original_filename": "document.pdf",
+      "filepath": "/path/to/file",
+      "size_bytes": 1024000,
+      "size_mb": 1.0,
+      "sender": "sender@example.com",
+      "subject": "Email Subject",
+      "date": "2024-01-15T09:00:00",
+      "email_id": "123",
+      "message_id": "MSG001",
+      "email_folder": "2024-01-15_MSG001_Subject",
+      "attachment_number": 1
+    }
+  ]
 }
 ```
 
-## Version History
-
-- **v1.1** (2024-12-16): Added file type filtering
-  - Advanced whitelist/blacklist filtering for attachments
-  - Support for `"*"` wildcard in configuration
-  - Improved iCloud compatibility
-  - Better error handling for malformed emails
-
-- **v1.0** (2024-12-15): Initial release
-  - Cross-platform support (Windows, Linux, macOS)
-  - Recursive folder processing
-  - Colored terminal output
-  - Comprehensive metadata tracking
-  - Multiple organization options
-
-## License
-
-MIT License - feel free to modify and distribute as needed.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
-
-## Support
-
-For issues, questions, or suggestions, please open an issue on GitHub or contact the maintainer.
-
-## Features
-
-- 📧 **IMAP Support**: Connect to any IMAP email server (Gmail, Outlook, iCloud, Yahoo, etc.)
-- 🔄 **Recursive Processing**: Process INBOX and all subfolders automatically
-- 📁 **Smart Organization**: Organize attachments by date, sender, or both
-- 🎨 **Colored Terminal Output**: Clear visual feedback with color-coded messages
-- 💾 **Metadata Tracking**: Save detailed JSON metadata about extracted attachments
-- 🔐 **Secure**: Supports SSL/TLS connections
-- 🖥️ **Cross-Platform**: Works on Windows, Linux, and macOS
-
-## Requirements
-
-- Python 3.7 or higher
-- No external dependencies (uses only Python standard library)
-
-## Installation
-
-1. Clone or download the script:
-```bash
-git clone https://github.com/yourusername/email-attachment-extractor.git
-cd email-attachment-extractor
-```
-
-2. Make the script executable (Linux/macOS):
-```bash
-chmod +x email_extractor.py
-```
-
-## Quick Start
-
-### Interactive Mode
-Simply run the script without arguments for guided setup:
-```bash
-python3 email_extractor.py
-```
-
-### With Configuration File
-Create a configuration file and run:
-```bash
-python3 email_extractor.py --config config.json
-```
-
-### Command Line Arguments
-```bash
-python3 email_extractor.py --server imap.gmail.com --username your@email.com --recursive
-```
-
-## Configuration File Format
-
-Create a `config.json` file with your email settings:
-
-```json
-{
-    "server": "imap.gmail.com",
-    "port": 993,
-    "username": "your.email@gmail.com",
-    "password": "your-app-password",
-    "use_ssl": true,
-    "mailbox": "INBOX",
-    "search_criteria": "ALL",
-    "organize_by_sender": false,
-    "organize_by_date": true,
-    "save_path": "/path/to/save/attachments",
-    "recursive": true,
-    "limit_per_folder": 100,
-    "total_limit": 1000,
-    "save_metadata": true
-}
-```
-
-**Note**: For security, consider omitting the password from the config file. The script will prompt for it.
-
-## Command Line Options
-
-| Option | Description |
-|--------|-------------|
-| `--config FILE` | Load configuration from JSON file |
-| `--server SERVER` | IMAP server address |
-| `--port PORT` | IMAP port (default: 993) |
-| `--username EMAIL` | Email address/username |
-| `--password PASS` | Password (not recommended in CLI) |
-| `--save-path PATH` | Directory to save attachments |
-| `--mailbox FOLDER` | Specific mailbox to process (default: INBOX) |
-| `--search CRITERIA` | IMAP search criteria (default: ALL) |
-| `--organize-by-sender` | Create folders organized by sender |
-| `--organize-by-date` | Create folders organized by date |
-| `--recursive` | Process all INBOX subfolders |
-| `--limit N` | Maximum emails to process |
-| `--limit-per-folder N` | Maximum emails per folder (recursive mode) |
-| `--total-limit N` | Total limit across all folders |
-| `--no-metadata` | Don't save metadata JSON files |
-
-## IMAP Search Criteria Examples
-
-- `ALL` - All emails
-- `UNSEEN` - Unread emails only
-- `FROM "sender@email.com"` - Emails from specific sender
-- `SINCE 1-Jan-2024` - Emails since specific date
-- `SUBJECT "Invoice"` - Emails with specific subject
-- `LARGER 1000000` - Emails with attachments larger than 1MB
-
-## Provider-Specific Setup
-
+## Provider-Specific Settings
 ### Gmail
-1. Enable 2-factor authentication
-2. Generate an app-specific password: https://myaccount.google.com/apppasswords
-3. Use the app password instead of your regular password
-
+- Enable 2-factor authentication
+- Generate an app-specific password
+- Use the app password instead of your regular password
 ### Outlook/Office 365
-1. If using 2FA, generate an app password
-2. Server: `outlook.office365.com`
-
+- Enable 2-factor authentication if required
+- Use app password if 2FA is enabled
 ### iCloud
-1. Generate an app-specific password: https://appleid.apple.com/account/manage
-2. Server: `imap.mail.me.com`
+- Generate an app-specific password from Apple ID settings
+- The tool handles iCloud's specific IMAP requirements automatically
+## Security Notes
+- Never commit passwords to version control
+- Use app-specific passwords when available
+- Store configuration files with passwords securely
+- Consider using environment variables for sensitive data
+- The tool uses SSL/TLS by default for secure connections
+## Troubleshooting
+### Common Issues
+#### Authentication Failed
+- Check username/password
+- Use app-specific password for Gmail/iCloud
+- Verify 2FA settings
+#### No Attachments Found
+- Check search criteria
+- Verify mailbox selection
+- Review allowed/excluded extensions
+#### Connection Timeout
+- Check server address and port
+- Verify internet connection
+- Check firewall settings
+### Wildcard Patterns Not Working
+- Ensure patterns are in quotes in command line
+- Check JSON syntax in config file
+- **Remember: exclusions always have priority**
+### Debug Mode
+Enable debug output by uncommenting line 14:
 
-## Output Structure
-
-The script creates the following folder structure:
-
+```python
+imaplib.Debug = 4
 ```
-save_path/
-├── INBOX/
-│   └── 2024-12-15/
-│       └── 2024-12-15_MessageID_Subject/
-│           ├── 01_attachment1.pdf
-│           └── 02_attachment2.docx
-├── INBOX_subfolder/
-│   └── 2024-12-14/
-│       └── 2024-12-14_MessageID_Subject/
-│           └── 01_document.xlsx
-└── attachments_metadata_total.json
-```
-
-### File Naming Convention
-- Each email gets its own folder: `YYYY-MM-DD_MessageID_Subject/`
-- Attachments are numbered: `01_filename.ext`, `02_filename.ext`
-- Metadata JSON files track all extracted attachments
 
 ## Examples
-
-### Extract all attachments from Gmail
+### Extract Only PDFs from Last 30 Days
 ```bash
-python3 email_extractor.py \
-    --server imap.gmail.com \
-    --username your@gmail.com \
+python email_attachment_extractor.py \
+    --config config.json \
+    --search "SINCE 15-Dec-2024" \
+    --file-types pdf
+```
+### Extract All Except Executables, Organize by Date
+```bash
+python email_attachment_extractor.py \
+    --config config.json \
+    --organize-by-date \
+    --file-types "*" \
+    --exclude-types exe bat sh dll
+```
+### Process All INBOX Folders Recursively
+```bash
+python email_attachment_extractor.py \
+    --config config.json \
     --recursive \
-    --organize-by-date
+    --limit-per-folder 100 \
+    --total-limit 1000
 ```
-
-### Process only unread emails with attachments
-```bash
-python3 email_extractor.py \
-    --config config.json \
-    --search "UNSEEN" \
-    --save-path /Volumes/Backup/EmailAttachments
-```
-
-### Extract from specific sender with limit
-```bash
-python3 email_extractor.py \
-    --config config.json \
-    --search 'FROM "client@company.com"' \
-    --limit 50
-```
-
-### Process specific mailbox folder
-```bash
-python3 email_extractor.py \
-    --config config.json \
-    --mailbox "INBOX/Projects" \
-    --organize-by-sender
-```
-
-## Color Output Guide
-
-The script uses colored terminal output for better readability:
-- **Cyan**: Information and progress messages
-- **Green**: Success messages
-- **Yellow**: Warnings
-- **Red**: Errors
-
-## Security Considerations
-
-1. **Never commit passwords**: Don't include passwords in config files that will be version controlled
-2. **Use app-specific passwords**: Most providers support app passwords for better security
-3. **File permissions**: Ensure config files with passwords have restricted permissions:
-   ```bash
-   chmod 600 config.json
-   ```
-4. **Use environment variables**: Consider storing passwords in environment variables:
-   ```bash
-   export EMAIL_PASSWORD="your-password"
-   ```
-
-## Troubleshooting
-
-### Connection Issues
-- Verify server address and port
-- Check if your email provider requires app-specific passwords
-- Ensure IMAP is enabled in your email settings
-- Check firewall/antivirus settings
-
-### No Attachments Found
-- Verify the search criteria matches your emails
-- Check if emails actually have attachments (not inline images)
-- Try with `--search "ALL"` first to test
-
-### Permission Errors
-- Ensure you have write permissions to the save path
-- On Windows, run as administrator if saving to system directories
-- Check disk space availability
-
-### Memory Issues with Large Mailboxes
-- Use `--limit` to process emails in batches
-- Use `--limit-per-folder` in recursive mode
-- Process specific date ranges with `--search "SINCE date BEFORE date"`
-
-## Metadata Format
-
-The script saves metadata in JSON format with the following structure:
-
+### Extract Word and Excel Files with Specific Patterns
 ```json
 {
-    "extraction_date": "2024-12-15T10:30:00",
-    "processed_folders": ["INBOX", "INBOX/Subfolder"],
-    "statistics": {
-        "emails_processed": 150,
-        "attachments_saved": 423,
-        "total_size_mb": 1250.5,
-        "errors": []
-    },
-    "attachments": [
-        {
-            "filename": "01_document.pdf",
-            "original_filename": "document.pdf",
-            "filepath": "/path/to/file",
-            "size_mb": 2.5,
-            "sender": "sender@email.com",
-            "subject": "Email Subject",
-            "date": "2024-12-15T09:00:00",
-            "message_id": "ABC123"
-        }
-    ]
+  "allowed_extensions": [
+    "report_*.doc*",
+    "invoice_*.xls*",
+    "data_20??_*.csv"
+  ],
+  "excluded_extensions": [
+    "*_draft.*",
+    "*_temp.*"
+  ]
 }
 ```
-
 ## License
-
-MIT License - feel free to modify and distribute as needed.
-
+This project is provided as-is for educational and personal use.
 ## Contributing
-
 Contributions are welcome! Please feel free to submit issues or pull requests.
-
-## Version History
-
-- **v1.0** (2024-12-15): Initial release
-  - Cross-platform support (Windows, Linux, macOS)
-  - Recursive folder processing
-  - Colored terminal output
-  - Comprehensive metadata tracking
-  - Multiple organization options
-
-## Support
-
-For issues, questions, or suggestions, please open an issue on GitHub or contact the maintainer.
+## Version
+Version 1.0.1
+<div align="center">
+Made with ❤️ for efficient email attachment management
+Star ⭐ this repository if you find it helpful!
+</div>
