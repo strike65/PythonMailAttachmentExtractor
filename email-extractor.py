@@ -8,6 +8,7 @@ Compatible with Windows, Linux, and macOS
 """
 
 import imaplib
+#imaplib.Debug = 4
 import email
 from email import policy
 from email.header import decode_header
@@ -136,7 +137,12 @@ class EmailAttachmentExtractor:
 
     def select_mailbox(self, mailbox: str = 'INBOX') -> bool:
         try:
-            status, _ = self.imap.select(mailbox, readonly=True)
+            # Speziell für iCloud - verwende nicht readonly
+            if 'imap.mail.me.com' in self.server:
+                status, _ = self.imap.select(mailbox, readonly=False)
+            else:
+                status, _ = self.imap.select(mailbox, readonly=True)
+                
             if status == 'OK':
                 print(Colors.success(f"Mailbox '{mailbox}' selected"))
                 return True
@@ -145,7 +151,6 @@ class EmailAttachmentExtractor:
         except Exception as e:
             print(Colors.error(f"Error selecting mailbox: {e}"))
             return False
-
     @staticmethod
     def decode_mime_string(s: Optional[str]) -> str:
         if not s:
@@ -204,7 +209,9 @@ class EmailAttachmentExtractor:
         msg: email.message.Message,
         save_path: str,
         organize_by_sender: bool = False,
-        organize_by_date: bool = False
+        organize_by_date: bool = False,
+        allowed_extensions: Optional[List[str]] = None,  # NEU
+        excluded_extensions: Optional[List[str]] = None   # NEU
     ) -> List[Dict]:
         saved_attachments: List[Dict] = []
 
@@ -249,7 +256,7 @@ class EmailAttachmentExtractor:
         # Collect all attachments first
         attachments_to_save = []
         attachment_counter = 0
-
+        should_skip = False
         for part in msg.walk():
             disp = part.get_content_disposition()
             filename = part.get_filename()
@@ -258,10 +265,38 @@ class EmailAttachmentExtractor:
             if not is_attachment:
                 continue
 
-            attachment_counter += 1
+            # attachment_counter += 1
             original_filename = self.decode_mime_string(filename or f'attachment_{attachment_counter}')
             sanitized_filename = self.sanitize_filename(original_filename)
+           
+            _, ext = os.path.splitext(sanitized_filename)
+            ext = ext.lower()
             
+            if excluded_extensions:
+                # Filter out None values and normalize extensions
+                excluded_exts_lower = [
+                    e.lower() if e.startswith('.') else f'.{e.lower()}' 
+                    for e in excluded_extensions if e is not None
+                ]
+                
+                if ext in excluded_exts_lower:
+                    print(Colors.warning(f"  Skipping {original_filename} - extension '{ext}' is excluded"))
+                    should_skip = True
+
+            # Check allowed extensions (only if not already excluded)
+            if not should_skip and allowed_extensions:
+                # Filter out None values and normalize extensions
+                allowed_exts_lower = [
+                    e.lower() if e.startswith('.') else f'.{e.lower()}' 
+                    for e in allowed_extensions if e is not None
+                ]
+                
+                if ext not in allowed_exts_lower:
+                    print(Colors.warning(f"  Skipping {original_filename} - extension '{ext}' not in allowed list"))
+                    should_skip = True
+            if should_skip:
+                continue
+            attachment_counter +=1
             # Add prefix for better sorting
             new_filename = f"{attachment_counter:02d}_{sanitized_filename}"
             
@@ -352,7 +387,9 @@ class EmailAttachmentExtractor:
         limit: Optional[int] = None,
         save_metadata: bool = True,
         processed_count: int = 0,
-        total_limit: Optional[int] = None
+        total_limit: Optional[int] = None,
+        allowed_extensions: Optional[List[str]] = None,
+        excluded_extensions: Optional[List[str]] = None,
     ) -> Tuple[Dict, int]:
         """Process a mailbox"""
         print(Colors.info(f"\nProcessing mailbox: {mailbox}"))
@@ -390,24 +427,50 @@ class EmailAttachmentExtractor:
                     
                 try:
                     print(Colors.info(f"\nProcessing email {idx}/{len(email_ids)} in {mailbox} (ID {eid})..."))
-                    status, data = self.imap.fetch(eid, '(RFC822)')
-                    
+#                    status, data = self.imap.fetch(eid, '(RFC822)')
+                    if 'imap.mail.me.com' in self.server:
+                        # iCloud braucht BODY[] statt RFC822
+                        status, data = self.imap.fetch(eid, '(BODY[])')
+                    else:
+                        status, data = self.imap.fetch(eid, '(RFC822)')                    
                     if status != 'OK' or not data:
-                        raise RuntimeError("Fetch returned no data")
+                        raise RuntimeError("Fetch returned status: {status}")
+                    
+                    if not data:
+                        raise RuntimeError("Ferch returned no data")
                     
                     raw_email = None
-                    for item in data:
-                        if isinstance(item, tuple) and len(item) >= 2 and isinstance(item[1], (bytes, bytearray)):
-                            raw_email = item[1]
-                            break
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, tuple) and len(item) >= 2 and isinstance(item[1], (bytes, bytearray)):
+                                raw_email = item[1]
+                                break
+                            elif isinstance(item, bytes):
+                                raw_email = item
+                                break
+                    elif isinstance(data, tuple) and len(data) >= 2:
+                        if isinstance(data[1], (bytes, bytearray)):
+                            raw_email = data[1]
                             
                     if raw_email is None:
-                        raise RuntimeError("No RFC822 payload found")
-                    
-                    msg = email.message_from_bytes(raw_email, policy=policy.default)
+                        print(f"Warning: Could not extract RFC822 data for email {eid}")
+                        print(f"  Data type: {type(data)}")
+                        print(f"  Data structure: {[type(item) for item in data] if isinstance(data, list) else 'not a list'}")
+                        continue  
+                    if 'imap.mail.me.com' in self.server:
+                        # iCloud manchmal spezielles Encoding
+                        if raw_email:
+                            # Versuche erst UTF-8
+                            try:
+                                msg = email.message_from_bytes(raw_email)
+                            except:
+                                # Fallback auf Latin-1
+                                msg = email.message_from_string(raw_email.decode('latin-1', errors='replace'))
+                    else:                    
+                        msg = email.message_from_bytes(raw_email, policy=policy.default)
                     
                     attachments = self.extract_attachments_from_email(
-                        eid, msg, mailbox_save_path, organize_by_sender, organize_by_date
+                        eid, msg, mailbox_save_path, organize_by_sender, organize_by_date, allowed_extensions, excluded_extensions
                     )
                     all_attachments.extend(attachments)
                     self.statistics['emails_processed'] += 1
@@ -417,6 +480,7 @@ class EmailAttachmentExtractor:
                     err = f"Error processing email {eid} in {mailbox}: {e}"
                     print(Colors.error(err))
                     self.statistics['errors'].append(err)
+                    continue
             
             if save_metadata and all_attachments:
                 metadata_file = os.path.join(mailbox_save_path, f'attachments_metadata_{mailbox_clean}.json')
@@ -443,7 +507,9 @@ class EmailAttachmentExtractor:
         organize_by_date: bool = False,
         limit_per_folder: Optional[int] = None,
         total_limit: Optional[int] = None,
-        save_metadata: bool = True
+        save_metadata: bool = True,
+        allowed_extensions: Optional[List[str]] = None,
+        excluded_extensions: Optional[List[str]] = None
     ) -> Dict:
         """Process INBOX and all subfolders"""
         all_mailboxes = self.get_mailboxes()
@@ -473,7 +539,9 @@ class EmailAttachmentExtractor:
                 limit_per_folder,
                 save_metadata,
                 processed_count,
-                total_limit
+                total_limit,
+                allowed_extensions,
+                excluded_extensions
             )
         
         if save_metadata:
@@ -498,7 +566,9 @@ class EmailAttachmentExtractor:
         organize_by_sender: bool = False,
         organize_by_date: bool = False,
         limit: Optional[int] = None,
-        save_metadata: bool = True
+        save_metadata: bool = True,
+        allowed_extensions: Optional[List[str]] = None,
+        excluded_extensions: Optional[List[str]] = None
     ) -> Dict:
         os.makedirs(save_path, exist_ok=True)
 
@@ -515,7 +585,12 @@ class EmailAttachmentExtractor:
         for idx, eid in enumerate(email_ids, 1):
             try:
                 print(Colors.info(f"\nProcessing email {idx}/{len(email_ids)} (ID {eid})..."))
-                status, data = self.imap.fetch(eid, '(RFC822)')
+#                status, data = self.imap.fetch(eid, '(RFC822)')
+                if 'imap.mail.me.com' in self.server:
+                # iCloud braucht BODY[] statt RFC822
+                    status, data = self.imap.fetch(eid, '(BODY[])')
+                else:
+                    status, data = self.imap.fetch(eid, '(RFC822)')
                 if status != 'OK' or not data:
                     raise RuntimeError("Fetch returned no data")
 
@@ -526,11 +601,20 @@ class EmailAttachmentExtractor:
                         break
                 if raw_email is None:
                     raise RuntimeError("No RFC822 payload found")
-
-                msg = email.message_from_bytes(raw_email, policy=policy.default)
+                if 'imap.mail.me.com' in self.server:
+                    # iCloud manchmal spezielles Encoding
+                    if raw_email:
+                        # Versuche erst UTF-8
+                        try:
+                            msg = email.message_from_bytes(raw_email)
+                        except:
+                            # Fallback auf Latin-1
+                            msg = email.message_from_string(raw_email.decode('latin-1', errors='replace'))
+                else:
+                    msg = email.message_from_bytes(raw_email, policy=policy.default)
 
                 attachments = self.extract_attachments_from_email(
-                    eid, msg, save_path, organize_by_sender, organize_by_date
+                    eid, msg, save_path, organize_by_sender, organize_by_date, allowed_extensions, excluded_extensions
                 )
                 all_attachments.extend(attachments)
                 self.statistics['emails_processed'] += 1
@@ -687,6 +771,17 @@ def load_config(config_file: str) -> Dict:
         config.setdefault('save_path', None)
         config.setdefault('limit', None)
         config.setdefault('recursive', False)
+        if 'allowed_extensions' not in config or config.get('allowed_extensions') is None:
+            config['allowed_extensions'] = None
+        # Wenn leere Liste -> behalte leere Liste (nichts erlaubt)
+        # Wenn gefüllte Liste -> behalte Liste
+        if 'excluded_extensions' not in config or config.get('excluded_extensions') is None:
+            config['excluded_extensions'] = None
+            
+        print(Colors.success(f"Configuration loaded from: {config_file}"))
+        config.setdefault('allowed_extensions', None)
+        config.setdefault('excluded_extensions', None)
+        
         
         print(Colors.success(f"Configuration loaded from: {config_file}"))
         return config
@@ -763,7 +858,13 @@ def main():
     parser.add_argument('--recursive', action='store_true', help='Process all INBOX subfolders recursively')
     parser.add_argument('--limit-per-folder', type=int, help='Maximum emails per folder (for recursive)')
     parser.add_argument('--total-limit', type=int, help='Total limit across all folders (for recursive)')
+    parser.add_argument('--file-types', '--extensions', nargs='+', dest='file_types',
+                       help='Allowed file extensions (e.g., pdf jpg docx or .pdf .jpg .docx)')
+    parser.add_argument('--exclude-types', nargs='+', dest='exclude_types',
+                       help='Excluded file extensions (e.g., exe bat or .exe .bat)')
 
+    allowed_extensions = None,
+    excluded_extensions = None,
     args = parser.parse_args()
 
     # Initialize configuration
@@ -800,8 +901,22 @@ def main():
         config['save_metadata'] = False
     if args.recursive:
         config['recursive'] = True
-
-    # If no configuration loaded and no server data available, start interactive setup
+    if hasattr(args, 'file_types') and args.file_types:
+        allowed_extensions = args.file_types  # z.B. ['pdf', 'docx']
+        print(Colors.info(f"Filtering for file types: {', '.join(allowed_extensions)}"))
+    elif 'allowed_extensions' in config and config['allowed_extensions'] is not None:
+        if config['allowed_extensions']:
+            allowed_extensions = config['allowed_extensions']
+            print(Colors.info(f"Filtering for file types (from config): {', '.join(allowed_extensions)}"))
+        else:
+            print(Colors.warning("Empty allowed_extensions in config - no attachments will be saved!"))
+    if hasattr(args, 'exclude_types') and args.exclude_types:
+        excluded_extensions = args.exclude_types
+        print(Colors.info(f"Excluding file types: {', '.join(excluded_extensions)}"))
+    elif 'excluded_extensions' in config and config['excluded_extensions'] is not None:
+        if config['excluded_extensions']:
+            excluded_extensions = config['excluded_extensions']
+            print(Colors.info(f"Excluding file types (from config): {', '.join(excluded_extensions)}"))    # If no configuration loaded and no server data available, start interactive setup
     if not config.get('server') or not config.get('username'):
         print(Colors.warning("\nNo complete configuration found. Starting interactive setup..."))
         settings = interactive_setup()
@@ -885,7 +1000,9 @@ def main():
                 organize_by_date=config.get('organize_by_date', True),
                 limit_per_folder=args.limit_per_folder or config.get('limit_per_folder'),
                 total_limit=args.total_limit or config.get('total_limit') or config.get('limit'),
-                save_metadata=config.get('save_metadata', True)
+                save_metadata=config.get('save_metadata', True),
+                allowed_extensions = allowed_extensions,
+                excluded_extensions = excluded_extensions
             )
         else:
             # Normal processing of a single mailbox
@@ -895,7 +1012,9 @@ def main():
                 organize_by_sender=config.get('organize_by_sender', False),
                 organize_by_date=config.get('organize_by_date', True),
                 limit=config.get('limit'),
-                save_metadata=config.get('save_metadata', True)
+                save_metadata=config.get('save_metadata', True),
+                allowed_extensions=allowed_extensions,
+                excluded_extensions=excluded_extensions
             )
 
         print("\n" + "="*60)

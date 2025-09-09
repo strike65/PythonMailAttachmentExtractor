@@ -11,5 +11,7 @@
     "save_path": "/Path/To/Dir",
     "limit_per_folder": 100,
     "total_limit": 1000,
-    "save_metadata": true
+    "save_metadata": true,
+    "allowd_extensions": null,
+    "excluded_extension": null
 }
