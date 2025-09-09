@@ -1,5 +1,5 @@
 # Email Attachment Extractor
-
+---
 A powerful cross-platform Python tool for extracting attachments from email accounts via IMAP. Supports Windows, Linux, and macOS with advanced filtering options including wildcard patterns.
 ---
 ## Features
