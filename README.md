@@ -1,277 +1,323 @@
 # Email Attachment Extractor
----
-A powerful cross-platform Python tool for extracting attachments from email accounts via IMAP. Supports Windows, Linux, and macOS with advanced filtering options including wildcard patterns.
----
-## Features
-- 🌐 **Cross-platform** compatibility (Windows, Linux, macOS)
-- 📧 **Multiple** email provider support (Gmail, Outlook, iCloud, Yahoo, GMX, Web.de, custom IMAP)
-- 📁 **Smart organization of attachments** by sender and/or date
-- 🔍 **Advanced filtering** with wildcard pattern support
-- 📊 **Comprehensive metadata** export (JSON format)
-- 🎨 **Colored terminal output** for better readability
-- 🔄 **Recursive mailbox processing** (process INBOX and all subfolders)
-- ⚙️ **Configuration** file support for automation
-- 🛡️ **Safe filename handling** across all platforms
-## Installation
-### Prerequisites
-- Python 3.6 or higher
-- pip (Python package installer)
-#### Required Python Libraries
-```bash
-pip install imaplib email pathlib
-```
-**Note: Most required libraries are part of Python's standard library.**
----
-## Quick Start 
-### Interactive Mode
-Simply run the script without arguments for interactive setup:
-```bash
-python email_attachment_extractor.py
 
-```
-### Command Line Mode
+**A powerful, modular Python application** for extracting attachments from email accounts via IMAP. Features advanced wildcard filtering, cross-platform support, and a clean modular architecture.
+
+## ✨ Features
+
+- 🌐 **Cross-platform compatibility** (Windows, Linux, macOS)
+- 📧 **15+ Email providers supported** (Gmail, Outlook, iCloud, Yahoo, etc.)
+- 🎯 **Advanced wildcard filtering** for file types
+- 📁 **Smart organization** by sender and/or date
+- 🔄 **Recursive folder processing** for complete mailbox extraction
+- 🎨 **Colored terminal output** for better readability
+- 📊 **Comprehensive metadata** export in JSON format
+- 🏗️ **Clean modular architecture** for easy maintenance and extension
+
+## 📦 Installation
+
+### **Prerequisites**
+- Python 3.6 or higher
+- No external dependencies required (uses Python standard library)
+
+### **Quick Setup**
+
+1. **Clone the repository:**
 ```bash
-python email_attachment_extractor.py \
+git clone https://github.com/yourusername/email-attachment-extractor.git
+cd email-attachment-extractor
+```
+
+2. **Optional: Create virtual environment:**
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or
+venv\Scripts\activate  # Windows
+```
+
+3. **Install optional dependencies:**
+```bash
+pip install -r requirements.txt
+```
+
+## 🚀 Quick Start
+
+### **Interactive Mode**
+Run without arguments for guided setup:
+```bash
+python main.py
+```
+
+### **Configuration File Mode** *(Recommended)*
+```bash
+python main.py --config config.json
+```
+
+### **Command Line Mode**
+```bash
+python main.py \
     --server imap.gmail.com \
     --username your.email@gmail.com \
     --save-path ./attachments \
     --organize-by-date \
     --file-types pdf docx xlsx
 ```
-### Configuration File Mode
-```bash
-python email_attachment_extractor.py --config config.json
-```
-## Configuration File
-Create a config.json file for automated extraction:
+
+## ⚙️ Configuration
+
+### **Sample config.json**
 ```json
 {
   "server": "imap.gmail.com",
   "port": 993,
   "username": "your.email@gmail.com",
-  "password": "your_app_password",
+  "password": null,
   "use_ssl": true,
   "mailbox": "INBOX",
   "search_criteria": "ALL",
   "organize_by_sender": false,
   "organize_by_date": true,
-  "save_path": "/path/to/save/attachments",
+  "save_path": "./attachments",
   "limit": 100,
   "save_metadata": true,
   "allowed_extensions": ["pdf", "*.doc*", "*.xls*"],
-  "excluded_extensions": ["exe", "bat", "*.tmp"]
+  "excluded_extensions": ["exe", "bat", "*.tmp"],
+  "recursive": false
 }
 ```
-## Wildcard Pattern Support
-The tool supports Unix-style wildcard patterns for flexible file filtering:
-Pattern Syntax
-```bash
-* - matches any number of characters
-? - matches exactly one character
-[seq] - matches any character in seq
-[!seq] - matches any character not in seq
-```
-## Examples
-### Allow All Files Except Dangerous
+
+> ⚠️ **Important:** Field names are case-sensitive. Use `excluded_extensions` (plural), not `excluded_extension`!
+
+## 🎯 Wildcard Pattern Support
+
+### **Pattern Syntax**
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `*` | Matches any characters | `*.pdf` matches all PDFs |
+| `?` | Matches single character | `doc?.pdf` matches `doc1.pdf` |
+| `[seq]` | Matches any char in seq | `file[123].txt` matches `file1.txt` |
+| `[!seq]` | Matches any char NOT in seq | `file[!0-9].txt` matches `fileA.txt` |
+
+### **Common Use Cases**
+
 ```json
 {
   "allowed_extensions": ["*"],
-  "excluded_extensions": ["exe", "bat", "sh", "dll", "scr"]
+  "excluded_extensions": ["exe", "bat", "dll", "scr"]
 }
 ```
-### Only Office Documents
+*Allow all files except potentially dangerous ones*
+
 ```json
 {
-  "allowed_extensions": ["*.doc*", "*.xls*", "*.ppt*", "pdf"],
-  "excluded_extensions": null
+  "allowed_extensions": ["*.doc*", "*.xls*", "*.ppt*", "pdf"]
 }
 ```
-### Complex Pattern Matching
+*Only office documents*
+
 ```json
 {
-  "allowed_extensions": [
-    "report_*.pdf",      // PDFs starting with "report_"
-    "invoice_*.pdf",     // PDFs starting with "invoice_"
-    "IMG_*.jpg",         // JPEGs starting with "IMG_"
-    "backup_20??.*",     // Backups from 2000-2099
-    "data_*.csv"         // CSV files starting with "data_"
-  ],
-  "excluded_extensions": [
-    "*_draft.*",         // All draft files
-    "*_temp.*",          // All temporary files
-    "~*",                // All backup files (starting with ~)
-    "*.bak",             // All .bak files
-    "test_*"             // All files starting with "test_"
-  ]
+  "allowed_extensions": ["report_*.pdf", "invoice_*.pdf", "IMG_*.jpg"]
 }
 ```
-## Command Line Options
+*Specific naming patterns*
 
-| Option| Description| Example|
-|-------|------------|--------|
-| `--config, -c`| Path to JSON configuration file| `--config config.json`|
-| `--server`             | IMAP server address                 | `--server imap.gmail.com`                  |
-| `--port`               | IMAP port (default: 993)            | `--port 993`                               |
-| `--username`           | Email address/username              | `--username user@example.com`              |
-| `--password`           | Password (prompt if not provided)   | `--password mypassword`                    |
-| `--save-path`          | Directory to save attachments       | `--save-path ./attachments`                |
-| `--mailbox`            | Mailbox/folder to process           | `--mailbox INBOX`                          |
-| `--search`             | IMAP search criteria                | `--search "SINCE 01-Jan-2024"`             |
-| `--organize-by-sender` | Create folders by sender            | `--organize-by-sender`                     |
-| `--organize-by-date`   | Create folders by date              | `--organize-by-date`                       |
-| `--limit`              | Max emails to process               | `--limit 50`                               |
-| `--recursive`          | Process all INBOX subfolders        | `--recursive`                              |
-| `--limit-per-folder`.  | Max emails per folder (recursive)   | `--limit-per-folder 100`                   |
-| `--total-limit`        | Total limit across all folders      | `--total-limit 500`                        |
-| `--file-types`         | Allowed file extensions/patterns    | `--file-types pdf "*.doc*" "*.xls*"`       |
-| `--exclude-types`      | Excluded file extensions/patterns   | `--exclude-types exe bat "*.tmp"`          |
-| `--no-metadata`        | Don't save metadata JSON            | `--no-metadata`                            |
+> 💡 **Tip:** Exclusions ALWAYS have priority over allowed patterns!
 
-## IMAP Search Criteria
-### Common IMAP search criteria for the search_criteria field:
-- ALL - All messages (default)
-- UNSEEN - Unread messages only
-- SEEN - Read messages only
-- SINCE 01-Jan-2024 - Messages since date
-- BEFORE 31-Dec-2024 - Messages before date
-- FROM "sender@example.com" - Messages from specific sender
-- SUBJECT "Invoice" - Messages with subject containing text
-- LARGER 1000000 - Messages larger than size (in bytes)
-- OR UNSEEN FLAGGED - Unread OR flagged messages
-- NOT DELETED - Non-deleted messages
-### Output Structure
-The tool creates an organized folder structure:
+## 📋 Command Line Options
+
+| Option | Description |
+|--------|-------------|
+| `--config FILE` | Path to JSON configuration file |
+| `--server HOST` | IMAP server address |
+| `--port PORT` | IMAP port (default: 993) |
+| `--username USER` | Email address/username |
+| `--password PASS` | Password (prompts if not provided) |
+| `--save-path PATH` | Directory to save attachments |
+| `--mailbox FOLDER` | Mailbox to process (default: INBOX) |
+| `--search CRITERIA` | IMAP search criteria |
+| `--organize-by-sender` | Create folders by sender |
+| `--organize-by-date` | Create folders by date |
+| `--recursive` | Process all INBOX subfolders |
+| `--limit N` | Max emails to process |
+| `--file-types PATTERN...` | Allowed file patterns |
+| `--exclude-types PATTERN...` | Excluded file patterns |
+| `--no-metadata` | Don't save metadata JSON |
+| `--debug` | Enable debug output |
+| `--version` | Show version |
+
+## 📁 Project Structure
 
 ```
-save_path/
+email_attachment_extractor/
+├── main.py                     # Main entry point
+├── config.json.example         # Example configuration
+├── requirements.txt            # Optional dependencies
+├── README.md                   # This file
+├── src/
+│   ├── core/                  # Core functionality
+│   │   ├── extractor.py       # Main extractor class
+│   │   ├── email_processor.py # Email parsing & attachments
+│   │   └── pattern_matcher.py # Wildcard pattern matching
+│   ├── utils/                 # Utility modules
+│   │   ├── colors.py          # Terminal colors
+│   │   ├── filesystem.py      # File operations
+│   │   └── config_loader.py   # Configuration handling
+│   ├── providers/             # Email providers
+│   │   └── email_providers.py # Provider configurations
+│   └── cli/                   # Command-line interface
+│       ├── argparser.py       # Argument parsing
+│       └── interactive.py     # Interactive setup
+└── tests/                     # Unit tests
+```
+
+## 📧 Supported Email Providers
+
+The application includes pre-configured settings for:
+
+- **Gmail** - Requires app-specific password
+- **Outlook/Office 365** - Standard IMAP support
+- **iCloud** - Special handling included
+- **Yahoo Mail** - May need app password
+- **ProtonMail** - Via ProtonMail Bridge
+- **FastMail, Zoho, GMX, Web.de** - And many more!
+
+### **Provider-Specific Notes**
+
+**Gmail:**
+1. Enable 2-factor authentication
+2. Generate app-specific password
+3. Use app password instead of regular password
+
+**iCloud:**
+1. Generate app-specific password from Apple ID settings
+2. Automatic special handling for iCloud quirks
+
+## 📁 Output Structure
+
+```
+attachments/
 ├── INBOX/
-│   ├── sender1@example.com/
+│   ├── sender@example.com/
 │   │   ├── 2024-01-15/
 │   │   │   ├── 2024-01-15_MSG001_Subject/
 │   │   │   │   ├── 01_document.pdf
 │   │   │   │   └── 02_image.jpg
-│   │   │   └── 2024-01-15_MSG002_Another_Subject/
-│   │   │       └── 01_report.xlsx
+│   │   │   └── attachments_metadata.json
 │   │   └── 2024-01-16/
-│   │       └── ...
-│   └── attachments_metadata_INBOX.json
-├── INBOX_Subfolder/
-│   └── ...
+│   └── another@example.com/
 └── attachments_metadata_total.json
 ```
 
-### Metadata Format
-The tool saves detailed metadata in JSON format:
-```json
-{
-  "extraction_date": "2024-01-15T10:30:00",
-  "mailbox": "INBOX",
-  "attachments": [
-    {
-      "filename": "01_document.pdf",
-      "original_filename": "document.pdf",
-      "filepath": "/path/to/file",
-      "size_bytes": 1024000,
-      "size_mb": 1.0,
-      "sender": "sender@example.com",
-      "subject": "Email Subject",
-      "date": "2024-01-15T09:00:00",
-      "email_id": "123",
-      "message_id": "MSG001",
-      "email_folder": "2024-01-15_MSG001_Subject",
-      "attachment_number": 1
-    }
-  ]
-}
-```
+## 🔍 IMAP Search Criteria
 
-## Provider-Specific Settings
-### Gmail
-- Enable 2-factor authentication
-- Generate an app-specific password
-- Use the app password instead of your regular password
-### Outlook/Office 365
-- Enable 2-factor authentication if required
-- Use app password if 2FA is enabled
-### iCloud
-- Generate an app-specific password from Apple ID settings
-- The tool handles iCloud's specific IMAP requirements automatically
-## Security Notes
-- Never commit passwords to version control
-- Use app-specific passwords when available
-- Store configuration files with passwords securely
-- Consider using environment variables for sensitive data
-- The tool uses SSL/TLS by default for secure connections
-## Troubleshooting
-### Common Issues
-#### Authentication Failed
-- Check username/password
-- Use app-specific password for Gmail/iCloud
-- Verify 2FA settings
-#### No Attachments Found
-- Check search criteria
-- Verify mailbox selection
-- Review allowed/excluded extensions
-#### Connection Timeout
-- Check server address and port
-- Verify internet connection
-- Check firewall settings
-### Wildcard Patterns Not Working
-- Ensure patterns are in quotes in command line
-- Check JSON syntax in config file
-- **Remember: exclusions always have priority**
-### Debug Mode
-Enable debug output by uncommenting line 14:
+| Criteria | Description |
+|----------|-------------|
+| `ALL` | All messages (default) |
+| `UNSEEN` | Unread messages only |
+| `SINCE 01-Jan-2024` | Messages since date |
+| `FROM sender@example.com` | From specific sender |
+| `SUBJECT "Invoice"` | Subject contains text |
+| `LARGER 1000000` | Larger than size (bytes) |
 
-```python
-imaplib.Debug = 4
-```
+## 💡 Examples
 
-## Examples
-### Extract Only PDFs from Last 30 Days
+### **Extract PDFs from last 30 days:**
 ```bash
-python email_attachment_extractor.py \
-    --config config.json \
-    --search "SINCE 15-Dec-2024" \
+python main.py --config config.json \
+    --search "SINCE 01-Dec-2024" \
     --file-types pdf
 ```
-### Extract All Except Executables, Organize by Date
+
+### **Process all folders recursively:**
 ```bash
-python email_attachment_extractor.py \
-    --config config.json \
-    --organize-by-date \
+python main.py --config config.json \
+    --recursive \
+    --limit-per-folder 100
+```
+
+### **Extract everything except executables:**
+```bash
+python main.py --config config.json \
     --file-types "*" \
     --exclude-types exe bat sh dll
 ```
-### Process All INBOX Folders Recursively
+
+## 🛠️ Development
+
+### **Running Tests:**
 ```bash
-python email_attachment_extractor.py \
-    --config config.json \
-    --recursive \
-    --limit-per-folder 100 \
-    --total-limit 1000
+pytest tests/
 ```
-### Extract Word and Excel Files with Specific Patterns
-```json
-{
-  "allowed_extensions": [
-    "report_*.doc*",
-    "invoice_*.xls*",
-    "data_20??_*.csv"
-  ],
-  "excluded_extensions": [
-    "*_draft.*",
-    "*_temp.*"
-  ]
-}
+
+### **Code Style:**
+```bash
+black src/
+pylint src/
 ```
-## License
-This project is provided as-is for educational and personal use.
-## Contributing
-Contributions are welcome! Please feel free to submit issues or pull requests.
-## Version
-Version 1.0.1
+
+### **Type Checking:**
+```bash
+mypy src/
+```
+
+## 🔒 Security Notes
+
+- **Never commit passwords** to version control
+- Use **app-specific passwords** when available
+- Store config files **securely**
+- Consider **environment variables** for credentials
+- SSL/TLS enabled by default
+
+## 🐛 Troubleshooting
+
+### **Authentication Failed**
+- Verify username/password
+- Use app-specific password for Gmail/iCloud
+- Check 2FA settings
+
+### **No Attachments Found**
+- Check search criteria
+- Verify allowed/excluded patterns
+- Ensure mailbox exists
+
+### **Import Errors**
+- Ensure you're running from project root
+- Check Python version (3.6+)
+- Verify all module files exist
+
+### **Debug Mode**
+Enable detailed output:
+```bash
+python main.py --config config.json --debug
+```
+
+## 📜 License
+
+MIT License - See LICENSE file for details
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new features
+4. Ensure all tests pass
+5. Submit a pull request
+
+## 📌 Version
+
+**Version 2.0.0** - Modular Architecture with Wildcard Support
+
+## 👤 Author
+
+strike
+
+---
+
 <div align="center">
-Made with ❤️ for efficient email attachment management
-Star ⭐ this repository if you find it helpful!
+
+*Star ⭐ this repository if you find it helpful!*
+
 </div>
