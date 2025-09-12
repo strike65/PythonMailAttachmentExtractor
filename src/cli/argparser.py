@@ -82,6 +82,7 @@ Examples:
     mailbox_group.add_argument(
         '--search',
         dest='search_criteria',
+        metavar='CRITERIA',
         help='IMAP search criteria (default: ALL)'
     )
     mailbox_group.add_argument(

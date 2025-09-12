@@ -10,7 +10,7 @@ Automatically handles Windows terminal compatibility.
 import platform
 import sys
 import os
-from typing import Optional, Any
+from typing import Optional, Any, Callable
 
 
 class Colors:
@@ -107,18 +107,13 @@ class Colors:
             # Try to enable ANSI support on Windows 10+
             import ctypes
             kernel32 = ctypes.windll.kernel32
-            
-            # Get current console mode
-            STD_OUTPUT_HANDLE = -11
-            handle = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
-            
-            # Enable ANSI escape sequence processing
             ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
-            mode = ctypes.c_ulong()
-            kernel32.GetConsoleMode(handle, ctypes.byref(mode))
-            mode.value |= ENABLE_VIRTUAL_TERMINAL_PROCESSING
-            kernel32.SetConsoleMode(handle, mode)
-            
+            for handle_id in (-11, -12):  # STD_OUTPUT_HANDLE, STD_ERROR_HANDLE
+                handle = kernel32.GetStdHandle(handle_id)
+                mode = ctypes.c_ulong()
+                if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                    new_mode = mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING
+                    kernel32.SetConsoleMode(handle, new_mode)
         except Exception:
             # If we can't enable ANSI on Windows, try colorama as fallback
             try:
@@ -134,9 +129,11 @@ class Colors:
         cls._enabled = False
     
     @classmethod
-    def enable(cls):
+    def enable(cls, force_recheck:bool = False):
         """Enable colored output."""
         cls._enabled = True
+        if force_recheck:
+            cls._initialized = False
         cls._initialize()
     
     @classmethod
@@ -273,6 +270,18 @@ class Colors:
             Cyan colored text
         """
         return cls._colorize(text, cls.CYAN)
+    
+    @classmethod
+    def red(cls, text: Any) -> str:
+        return cls._colorize(text, cls.RED)
+
+    @classmethod
+    def yellow(cls, text: Any) -> str:
+        return cls._colorize(text, cls.YELLOW)
+
+    @classmethod
+    def green(cls, text: Any) -> str:
+        return cls._colorize(text, cls.GREEN)
     
     @classmethod
     def custom(cls, text: Any, fg: Optional[str] = None, 

@@ -163,7 +163,7 @@ class ConfigLoader:
             'password': 'password',
             'save_path': 'save_path',
             'mailbox': 'mailbox',
-            'search': 'search_criteria',
+            'search_criteria': 'search_criteria',
             'limit': 'limit',
             'recursive': 'recursive',
             'limit_per_folder': 'limit_per_folder',
