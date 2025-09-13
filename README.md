@@ -18,13 +18,14 @@
 ### **Prerequisites**
 - Python 3.6 or higher
 - No external dependencies required (uses Python standard library)
+  - Windows users: install `colorama` (included in `requirements.txt`) for colored output.
 
 ### **Quick Setup**
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/yourusername/email-attachment-extractor.git
-cd email-attachment-extractor
+git clone <repo-url>
+cd PythonMailAttachmentExtractor
 ```
 
 2. **Optional: Create virtual environment:**
@@ -45,17 +46,17 @@ pip install -r requirements.txt
 ### **Interactive Mode**
 Run without arguments for guided setup:
 ```bash
-python main.py
+python email-attachment-extractor.py
 ```
 
 ### **Configuration File Mode** *(Recommended)*
 ```bash
-python main.py --config config.json
+python email-attachment-extractor.py --config config.json
 ```
 
 ### **Command Line Mode**
 ```bash
-python main.py \
+python email-attachment-extractor.py \
     --server imap.gmail.com \
     --username your.email@gmail.com \
     --save-path ./attachments \
@@ -79,6 +80,8 @@ python main.py \
   "organize_by_date": true,
   "save_path": "./attachments",
   "limit": 100,
+  "limit_per_folder": null,
+  "total_limit": null,
   "save_metadata": true,
   "allowed_extensions": ["pdf", "*.doc*", "*.xls*"],
   "excluded_extensions": ["exe", "bat", "*.tmp"],
@@ -134,42 +137,47 @@ python main.py \
 | `--port PORT` | IMAP port (default: 993) |
 | `--username USER` | Email address/username |
 | `--password PASS` | Password (prompts if not provided) |
+| `--no-ssl` | Disable SSL/TLS (default is SSL on) |
 | `--save-path PATH` | Directory to save attachments |
 | `--mailbox FOLDER` | Mailbox to process (default: INBOX) |
 | `--search CRITERIA` | IMAP search criteria |
 | `--organize-by-sender` | Create folders by sender |
 | `--organize-by-date` | Create folders by date |
 | `--recursive` | Process all INBOX subfolders |
-| `--limit N` | Max emails to process |
+| `--limit N` | Max emails to process (single mailbox) |
+| `--limit-per-folder N` | Max emails per folder (recursive mode) |
+| `--total-limit N` | Total limit across all folders (recursive mode) |
 | `--file-types PATTERN...` | Allowed file patterns |
 | `--exclude-types PATTERN...` | Excluded file patterns |
 | `--no-metadata` | Don't save metadata JSON |
-| `--debug` | Enable debug output |
+| `--verbose, -v` | Enable verbose output |
+| `--dry-run` | Test run without saving attachments |
+| `--debug` | Enable detailed IMAP debug output |
 | `--version` | Show version |
 
 ## 📁 Project Structure
 
 ```
-email_attachment_extractor/
-├── main.py                     # Main entry point
-├── config.json.example         # Example configuration
-├── requirements.txt            # Optional dependencies
-├── README.md                   # This file
+PythonMailAttachmentExtractor/
+├── email-attachment-extractor.py  # Main entry point
+├── config.json                    # Sample configuration
+├── requirements.txt               # Optional + dev dependencies
+├── README.md                      # This file
 ├── src/
-│   ├── core/                  # Core functionality
-│   │   ├── extractor.py       # Main extractor class
-│   │   ├── email_processor.py # Email parsing & attachments
-│   │   └── pattern_matcher.py # Wildcard pattern matching
-│   ├── utils/                 # Utility modules
-│   │   ├── colors.py          # Terminal colors
-│   │   ├── filesystem.py      # File operations
-│   │   └── config_loader.py   # Configuration handling
-│   ├── providers/             # Email providers
-│   │   └── email_providers.py # Provider configurations
-│   └── cli/                   # Command-line interface
-│       ├── argparser.py       # Argument parsing
-│       └── interactive.py     # Interactive setup
-└── tests/                     # Unit tests
+│   ├── core/                      # Core functionality
+│   │   ├── extractor.py           # Main extractor class
+│   │   ├── email_processor.py     # Email parsing & attachments
+│   │   └── pattern_matcher.py     # Wildcard pattern matching
+│   ├── utils/                     # Utility modules
+│   │   ├── colors.py              # Terminal colors
+│   │   ├── filesystem.py          # File operations
+│   │   └── config_loader.py       # Configuration handling
+│   ├── providers/                 # Email providers
+│   │   └── email_providers.py     # Provider configurations
+│   └── cli/                       # Command-line interface
+│       ├── argparser.py           # Argument parsing
+│       └── interactive.py         # Interactive setup
+└── tests/                         # Unit tests
 ```
 
 ## 📧 Supported Email Providers
@@ -225,21 +233,21 @@ attachments/
 
 ### **Extract PDFs from last 30 days:**
 ```bash
-python main.py --config config.json \
+python email-attachment-extractor.py --config config.json \
     --search "SINCE 01-Dec-2024" \
     --file-types pdf
 ```
 
 ### **Process all folders recursively:**
 ```bash
-python main.py --config config.json \
+python email-attachment-extractor.py --config config.json \
     --recursive \
     --limit-per-folder 100
 ```
 
 ### **Extract everything except executables:**
 ```bash
-python main.py --config config.json \
+python email-attachment-extractor.py --config config.json \
     --file-types "*" \
     --exclude-types exe bat sh dll
 ```
@@ -290,7 +298,7 @@ mypy src/
 ### **Debug Mode**
 Enable detailed output:
 ```bash
-python main.py --config config.json --debug
+python email-attachment-extractor.py --config config.json --debug
 ```
 
 ## 📜 License
