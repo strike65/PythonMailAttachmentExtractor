@@ -79,6 +79,7 @@ python email-attachment-extractor.py \
   "organize_by_sender": false,
   "organize_by_date": true,
   "save_path": "./attachments",
+  "log_file": null,
   "limit": 100,
   "limit_per_folder": null,
   "total_limit": null,
@@ -90,6 +91,9 @@ python email-attachment-extractor.py \
 ```
 
 > ⚠️ **Important:** Field names are case-sensitive. Use `excluded_extensions` (plural), not `excluded_extension`!
+
+Notes:
+- `log_file`: when provided (as a path string), all console output is mirrored to this file with ANSI colors stripped. The CLI option `--log-file` takes precedence over the config value.
 
 ## 🎯 Wildcard Pattern Support
 
@@ -153,6 +157,7 @@ python email-attachment-extractor.py \
 | `--verbose, -v` | Enable verbose output |
 | `--dry-run` | Test run without saving attachments |
 | `--debug` | Enable detailed IMAP debug output |
+| `--log-file FILE` | Mirror console output to FILE (colors stripped) |
 | `--version` | Show version |
 
 ## 📁 Project Structure
@@ -251,6 +256,14 @@ python email-attachment-extractor.py --config config.json \
     --file-types "*" \
     --exclude-types exe bat sh dll
 ```
+
+### **Enable debug logging to a file:**
+```bash
+python email-attachment-extractor.py --config config.json \
+    --debug \
+    --log-file ./logs/extractor.log
+```
+This mirrors all console output (stdout and stderr) to the given file, strips ANSI colors, and appends to the file. Combine with `--debug` for detailed IMAP and workflow traces.
 
 ## 🛠️ Development
 

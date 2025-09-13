@@ -49,6 +49,10 @@ def interactive_setup() -> Optional[Dict]:
     filters = get_file_filters()
     config.update(filters)
     
+    # Get logging options
+    logging_opts = get_logging_options()
+    config.update(logging_opts)
+    
     return config
 
 
@@ -249,6 +253,24 @@ def get_file_filters() -> Dict:
     return filters
 
 
+def get_logging_options() -> Dict:
+    """
+    Get logging options interactively.
+    
+    Returns:
+        Dict with optional 'log_file' path
+    """
+    print(Colors.info("\nLogging Options:"))
+    print("-" * 40)
+    
+    enable_log = input(Colors.cyan("Log output to a file? (y/n, default n): ")).strip().lower()
+    if enable_log == 'y':
+        path = input(Colors.cyan("Log file path (e.g., ./logs/extractor.log): ")).strip()
+        if path:
+            return {"log_file": os.path.expanduser(path)}
+    return {"log_file": None}
+
+
 def select_mailbox_interactive(mailboxes: List[str]) -> Optional[str]:
     """
     Interactively select a mailbox from list.
@@ -319,6 +341,10 @@ def confirm_settings(config: Dict) -> bool:
         print(f"  Allowed patterns: {', '.join(config['allowed_extensions'])}")
     if config.get('excluded_extensions'):
         print(f"  Excluded patterns: {', '.join(config['excluded_extensions'])}")
+    
+    # Logging
+    if config.get('log_file'):
+        print(f"  Log file: {config.get('log_file')}")
     
     print("="*60)
     

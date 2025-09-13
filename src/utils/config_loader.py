@@ -31,6 +31,7 @@ class ConfigLoader:
         'organize_by_date': True,
         'save_metadata': True,
         'save_path': None,
+        'log_file': None,
         'limit': None,
         'recursive': False,
         'limit_per_folder': None,
@@ -123,6 +124,12 @@ class ConfigLoader:
                     return False
                 # Filter out None values
                 config[field] = [ext for ext in config[field] if ext is not None]
+
+        # Validate log_file if present
+        if 'log_file' in config and config['log_file'] is not None:
+            if not isinstance(config['log_file'], str):
+                print(Colors.warning("'log_file' should be a string path; ignoring invalid value"))
+                config['log_file'] = None
         
         return True
     
@@ -170,6 +177,7 @@ class ConfigLoader:
             'username': 'username',
             'password': 'password',
             'save_path': 'save_path',
+            'log_file': 'log_file',
             'mailbox': 'mailbox',
             'search_criteria': 'search_criteria',
             'limit': 'limit',
@@ -185,6 +193,7 @@ class ConfigLoader:
             'username': str,
             'password': (str, type(None)),
             'save_path': str,
+            'log_file': (str, type(None)),
             'mailbox': str,
             'search_criteria': str,
             'limit': int,
@@ -314,6 +323,7 @@ class ConfigLoader:
             "organize_by_sender": False,
             "organize_by_date": True,
             "save_path": "./attachments",
+            "log_file": None,
             "limit": 100,
             "save_metadata": True,
             "allowed_extensions": ["pdf", "*.doc*", "*.xls*"],

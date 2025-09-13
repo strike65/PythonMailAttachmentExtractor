@@ -164,6 +164,11 @@ Examples:
         help='Enable debug mode with detailed IMAP output'
     )
     debug_group.add_argument(
+        '--log-file',
+        metavar='FILE',
+        help='Also write console output to FILE (colors stripped)'
+    )
+    debug_group.add_argument(
         '--dry-run',
         action='store_true',
         help='Test run without saving attachments'

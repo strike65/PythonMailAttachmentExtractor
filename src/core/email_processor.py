@@ -17,6 +17,7 @@ from typing import Dict, List, Optional, Tuple, Any
 import email.utils
 
 from ..utils.colors import Colors
+from ..utils.debug import dprint
 from ..utils.filesystem import sanitize_filename, get_unique_filename, create_directory
 from .pattern_matcher import PatternMatcher
 
@@ -101,6 +102,10 @@ class EmailProcessor:
         # Extract email metadata
         email_info = self._extract_email_metadata(msg, email_id)
         self.current_email_info = email_info
+        dprint(
+            f"Email id={email_id} from='{email_info.get('sender_email','')}' subject='{email_info.get('subject','')[:80]}' date='{email_info.get('date_str','')}'",
+            tag="MAIL",
+        )
         
         # Prepare target directory structure
         target_dir = self._prepare_directory_structure(
@@ -109,6 +114,7 @@ class EmailProcessor:
             organize_by_sender,
             organize_by_date
         )
+        dprint(f"Target directory: {target_dir}", tag="MAIL")
         
         # Collect attachments from email
         attachments_to_save = self._collect_attachments(
@@ -136,6 +142,7 @@ class EmailProcessor:
             print(Colors.warning(
                 f"  No attachments to save from {sender_short} - {subject_short}"
             ))
+        dprint(f"Saved {len(saved_attachments)} attachment(s)", tag="MAIL")
         
         return saved_attachments
     
@@ -343,6 +350,7 @@ class EmailProcessor:
             print(Colors.success(
                 f"  Saved: {email_info['email_folder_name']}/{unique_filename} ({size_mb} MB)"
             ))
+            dprint(f"Saved to path: {filepath}", tag="FILE")
             
             return info
             

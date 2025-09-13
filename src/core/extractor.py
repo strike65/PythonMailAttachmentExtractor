@@ -17,6 +17,7 @@ from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 
 from ..utils.colors import Colors, ProgressIndicator
+from ..utils.debug import dprint, mask_secret, is_enabled as debug_enabled
 from ..utils.filesystem import create_directory
 from .email_processor import EmailProcessor
 from .pattern_matcher import PatternMatcher
@@ -75,6 +76,10 @@ class EmailAttachmentExtractor:
             True if connection successful, False otherwise
         """
         try:
+            dprint(
+                f"Connecting to server='{self.server}' port={self.port} ssl={self.use_ssl} user='{self.username}' (pwd={mask_secret(self.password)})",
+                tag="IMAP",
+            )
             if self.use_ssl:
                 context = ssl.create_default_context()
                 self.imap = imaplib.IMAP4_SSL(
@@ -87,6 +92,7 @@ class EmailAttachmentExtractor:
                 
             self.imap.login(self.username, self.password)
             print(Colors.success(f"Successfully connected to {self.server}"))
+            dprint("Login successful", tag="IMAP")
             return True
             
         except imaplib.IMAP4.error as e:
@@ -127,6 +133,7 @@ class EmailAttachmentExtractor:
                 if folder_name:
                     folders.append(folder_name)
                     
+            dprint(f"Fetched {len(folders)} mailbox(es)", tag="IMAP")
             return folders
             
         except Exception as e:
@@ -149,12 +156,15 @@ class EmailAttachmentExtractor:
             # writable selection (readonly=False) there, otherwise prefer
             # readonly to minimize side effects.
             if 'imap.mail.me.com' in self.server:
+                dprint(f"Selecting mailbox '{mailbox}' readonly=False (iCloud)", tag="IMAP")
                 status, _ = self.imap.select(mailbox, readonly=False)
             else:
+                dprint(f"Selecting mailbox '{mailbox}' readonly=True", tag="IMAP")
                 status, _ = self.imap.select(mailbox, readonly=True)
                 
             if status == 'OK':
                 print(Colors.success(f"Mailbox '{mailbox}' selected"))
+                dprint(f"Mailbox '{mailbox}' ready", tag="IMAP")
                 return True
                 
             print(Colors.error(f"Could not select mailbox '{mailbox}'"))
@@ -182,6 +192,7 @@ class EmailAttachmentExtractor:
         try:
             status, data = self.imap.search(None, search_criteria)
             if status != 'OK' or not data or not data[0]:
+                dprint(f"Search returned no results (status={status})", tag="IMAP")
                 return []
                 
             raw_ids = data[0].split()
@@ -189,7 +200,8 @@ class EmailAttachmentExtractor:
             
             if limit is not None:
                 ids = ids[:max(0, int(limit))]
-                
+            preview = ','.join(ids[:5])
+            dprint(f"Search '{search_criteria}' -> {len(ids)} id(s). First: [{preview}]", tag="IMAP")
             return ids
             
         except Exception as e:
@@ -378,11 +390,14 @@ class EmailAttachmentExtractor:
         try:
             # Special handling for iCloud
             if 'imap.mail.me.com' in self.server:
+                dprint(f"FETCH {email_id} using BODY[] (iCloud)", tag="IMAP")
                 status, data = self.imap.fetch(email_id, '(BODY[])')
             else:
+                dprint(f"FETCH {email_id} using RFC822", tag="IMAP")
                 status, data = self.imap.fetch(email_id, '(RFC822)')
             
             if status != 'OK' or not data:
+                dprint(f"FETCH {email_id} failed or empty (status={status})", tag="IMAP")
                 return None
             
             # Extract raw email from response
@@ -439,6 +454,10 @@ class EmailAttachmentExtractor:
         # Clean mailbox name for filesystem
         mailbox_clean = mailbox.replace('/', '_').replace('\\', '_').replace(':', '_')
         mailbox_save_path = os.path.join(save_path, mailbox_clean)
+        dprint(
+            f"Effective limit: {kwargs.get('limit')} (processed so far: {processed_count}); save into '{mailbox_save_path}'",
+            tag="RUN",
+        )
         
         # Process emails in this mailbox
         stats = self.process_emails(
