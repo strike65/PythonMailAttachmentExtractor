@@ -178,7 +178,7 @@ Examples:
     parser.add_argument(
         '--version',
         action='version',
-        version='%(prog)s 2.0.0'
+        version='%(prog)s 2.1.0'
     )
     
     return parser

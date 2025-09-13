@@ -329,7 +329,7 @@ Contributions are welcome! Please:
 
 ## 📌 Version
 
-**Version 2.0.0** - Modular Architecture with Wildcard Support
+**Version 2.1.0** - Modular Architecture with Wildcard Support
 
 ## 👤 Author
 
