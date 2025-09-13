@@ -114,6 +114,8 @@ class ConfigLoader:
                     return False
         
         # Validate extension lists
+        # Keep lists only; filter out None entries so callers may pass
+        # partially constructed lists without failing validation.
         for field in ['allowed_extensions', 'excluded_extensions']:
             if field in config and config[field] is not None:
                 if not isinstance(config[field], list):
@@ -147,6 +149,12 @@ class ConfigLoader:
         Merge configuration with command-line arguments.
         
         Command-line arguments override configuration file values.
+        
+        Implementation detail:
+        - Only merges attributes that exist and match expected types.
+        - Coerces numeric strings for integer fields (e.g., '--limit "10"').
+        - Ignores unexpected types (e.g., bare Mock objects) to avoid
+          polluting the config with invalid values during tests.
         
         Args:
             config: Configuration dictionary

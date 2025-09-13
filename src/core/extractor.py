@@ -145,6 +145,9 @@ class EmailAttachmentExtractor:
         """
         try:
             # Special handling for iCloud
+            # iCloud blocks read-only selects for certain operations; use
+            # writable selection (readonly=False) there, otherwise prefer
+            # readonly to minimize side effects.
             if 'imap.mail.me.com' in self.server:
                 status, _ = self.imap.select(mailbox, readonly=False)
             else:
@@ -348,7 +351,12 @@ class EmailAttachmentExtractor:
     # ========== Private Helper Methods ==========
     
     def _parse_mailbox_name(self, raw: bytes) -> Optional[str]:
-        """Parse mailbox name from IMAP LIST response."""
+        """
+        Parse mailbox name from IMAP LIST response.
+        
+        The typical LIST response is: (flags) "delimiter" "mailbox"
+        This method attempts a best-effort parse and returns None on errors.
+        """
         try:
             line = raw.decode(errors='replace')
             # Parse format: (flags) "delimiter" mailbox_name
@@ -361,7 +369,12 @@ class EmailAttachmentExtractor:
             return None
     
     def _fetch_email(self, email_id: str) -> Optional[bytes]:
-        """Fetch raw email data."""
+        """
+        Fetch raw email data for the given id using the appropriate body
+        section for the provider. Some providers (e.g., iCloud) require
+        '(BODY[])' whereas generic IMAP servers typically support '(RFC822)'.
+        Returns None when the fetch fails or the response cannot be parsed.
+        """
         try:
             # Special handling for iCloud
             if 'imap.mail.me.com' in self.server:

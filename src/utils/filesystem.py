@@ -19,15 +19,20 @@ from .colors import Colors
 
 def sanitize_filename(filename: str) -> str:
     """
-    Sanitize a filename for safe use across all platforms.
+    Sanitize a filename for safe use across Windows, macOS, and Linux.
     
-    Removes or replaces characters that are invalid on Windows/Unix/macOS.
+    Notes:
+    - Replaces most invalid characters with an underscore.
+    - Removes asterisk ('*') entirely to avoid accidental globbing.
+    - Strips leading/trailing spaces and dots so names don't collapse/hide.
+    - On Windows, prefixes reserved device names (CON, PRN, etc.).
+    - Truncates long names conservatively to avoid filesystem limits.
     
     Args:
-        filename: Original filename
+        filename: Original filename (may be None/empty)
         
     Returns:
-        Sanitized filename safe for all platforms
+        Sanitized filename safe for all platforms (never empty)
     """
     if not filename:
         return 'unnamed'
@@ -54,7 +59,8 @@ def sanitize_filename(filename: str) -> str:
         if name_without_ext in reserved:
             filename = f'_{filename}'
     
-    # Limit filename length (255 for most systems, but be conservative)
+    # Limit filename length (255 on most systems). Be conservative here
+    # because additional path segments may be added by callers.
     max_length = 200
     if len(filename) > max_length:
         name, ext = os.path.splitext(filename)

@@ -74,8 +74,14 @@ class EmailProcessor:
         """
         Extract and save attachments from an email message.
         
+        Behavior:
+        - Filenames are sanitized before matching and saving.
+        - A numeric prefix (01_, 02_, ...) is added to preserve order.
+        - Existing files are not overwritten; a unique name is chosen.
+        - Allowed/excluded patterns are applied via PatternMatcher.
+        
         Args:
-            email_id: Unique identifier for the email
+            email_id: Unique identifier for the email (for metadata)
             msg: Parsed email message
             save_path: Base directory to save attachments
             organize_by_sender: Create subdirectories by sender
@@ -458,7 +464,10 @@ class EmailProcessor:
     @staticmethod
     def _extract_attachment_content(part: email.message.Message) -> Optional[bytes]:
         """
-        Extract content from attachment part.
+        Extract content from an attachment part.
+        
+        Tries `get_payload(decode=True)` first, then falls back to the raw
+        string payload (encoded to bytes) when necessary.
         
         Args:
             part: Email message part containing attachment
@@ -478,9 +487,10 @@ class EmailProcessor:
     
     def get_email_summary(self, msg: email.message.Message) -> Dict[str, Any]:
         """
-        Get a summary of email without processing attachments.
+        Get a summary of an email without saving attachments.
         
-        Useful for preview or listing emails.
+        Useful for previews/listing; counts attachments and collects their
+        names (best-effort) and a rough byte-size estimate from payloads.
         
         Args:
             msg: Email message object
