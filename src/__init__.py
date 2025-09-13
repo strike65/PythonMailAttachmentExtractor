@@ -6,4 +6,4 @@ __version__ = "2.0.0"
 __author__ = "Email Attachment Extractor"
 __license__ = "MIT"
 
-# Keine Imports hier, um zirkuläre Abhängigkeiten zu vermeiden
+# Avoid imports here to prevent circular dependencies
