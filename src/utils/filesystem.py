@@ -32,13 +32,17 @@ def sanitize_filename(filename: str) -> str:
     if not filename:
         return 'unnamed'
     
-    # Remove invalid characters for all platforms
+    # Remove or replace invalid characters for all platforms
     # Windows: < > : " / \ | ? * and ASCII 0-31
     # Unix/Linux/macOS: mainly / and null
-    filename = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '_', filename)
+    # Strategy:
+    # - Replace most invalids with '_'
+    # - Remove '*' entirely (commonly appears in glob patterns)
+    filename = re.sub(r'[<>:"/\\|?\x00-\x1F]', '_', filename)
+    filename = filename.replace('*', '')
     
     # Remove leading/trailing spaces and dots
-    filename = filename.strip().rstrip('.')
+    filename = filename.strip().strip('.')
     
     # Handle Windows reserved names
     if platform.system() == 'Windows':

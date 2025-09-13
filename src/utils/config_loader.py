@@ -170,9 +170,46 @@ class ConfigLoader:
             'total_limit': 'total_limit'
         }
         
+        # Expected types for sanity-checking Mock/default values
+        expected_types = {
+            'server': str,
+            'port': int,
+            'username': str,
+            'password': (str, type(None)),
+            'save_path': str,
+            'mailbox': str,
+            'search_criteria': str,
+            'limit': int,
+            'recursive': bool,
+            'limit_per_folder': int,
+            'total_limit': int,
+        }
+
         for arg_name, config_name in field_mappings.items():
-            if hasattr(args, arg_name) and getattr(args, arg_name) is not None:
-                config[config_name] = getattr(args, arg_name)
+            # Safely get value; Mock objects often fabricate attributes
+            value = getattr(args, arg_name, None)
+            if value is None:
+                continue
+
+            # Coerce common CLI string numerics where appropriate
+            if config_name in ('port', 'limit', 'limit_per_folder', 'total_limit') and isinstance(value, str):
+                if value.isdigit():
+                    value = int(value)
+                else:
+                    # Ignore non-numeric strings for integer fields
+                    continue
+
+            # Only accept values of expected type to avoid Mock leakage
+            exp_type = expected_types.get(config_name)
+            if exp_type is not None and not isinstance(value, exp_type):
+                # For booleans, allow truthy/falsey coercion explicitly
+                if config_name == 'recursive':
+                    value = bool(value)
+                else:
+                    # Skip unsupported types (e.g., bare Mock objects)
+                    continue
+
+            config[config_name] = value
         
         # Boolean flags
         if hasattr(args, 'organize_by_sender') and args.organize_by_sender:
@@ -183,10 +220,14 @@ class ConfigLoader:
             config['save_metadata'] = False
         
         # File types (extensions)
-        if hasattr(args, 'file_types') and args.file_types:
-            config['allowed_extensions'] = args.file_types
-        if hasattr(args, 'exclude_types') and args.exclude_types:
-            config['excluded_extensions'] = args.exclude_types
+        if hasattr(args, 'file_types'):
+            ft = getattr(args, 'file_types')
+            if isinstance(ft, (list, tuple)):
+                config['allowed_extensions'] = list(ft)
+        if hasattr(args, 'exclude_types'):
+            et = getattr(args, 'exclude_types')
+            if isinstance(et, (list, tuple)):
+                config['excluded_extensions'] = list(et)
         
         return config
     
